@@ -4,8 +4,48 @@
 
 ---
 
+## 🛠 开源代码引用
+
+本项目代码由 Claude Opus AI 辅助生成
+
+**天诚修复与新增功能：**
+*   ❇️ 修复了 Cloudflare 网站不能访问的问题。
+*   ❇️ 新增加了机场三字码的适配。
+*   ❇️ 新增优选IP支持。
+*   ❇️ 新增解锁 Emby 播放器。
+*   ❇️ 新增了韩国节点适配。
+*   ❇️ Vless 订阅器内置 CSV 文件优化识别功能。
+
+**引用的开源项目与服务：**
+*   **源代码作者**：[Alexandre_Kojeve](https://t.me/Alexandre_Kojeve) (致敬原版 stallTCP1.32)
+*   **源代码作者GitHub主页**：[Alexandre_Kojeve](https://github.com/orgs/ToiCF/repositories)
+*   **GrainTCP 内核**：[nickerwen/graincf](https://github.com/nickerwen/graincf) — 高性能代理内核
+*   **TURN 协议支持**：[ToiCF/CF-Workers-TURN](https://github.com/ToiCF/CF-Workers-TURN)
+*   **ProxyIP 服务支持**：
+    *   [cmliu/CMLiussss](https://github.com/cmliu)
+    *   [RealNeoMan/威廉大佬](https://t.me/RealNeoMan)
+    *   [Moist_R/欢乐时光群组大佬](https://t.me/o00oxooo)
+*   **SUB优选订阅生成创作支持**：
+    *   [cmliu/WorkerVless2sub项目](https://github.com/cmliu/WorkerVless2sub)（sub支持）
+*   **SUB服务支持**：
+    *   [M佬/欢乐时光订阅器支持](https://owo.o00o.ooo/)
+    *   【天诚订阅器支持】— 由于是福利群隐藏链接故而不公开
+    *   [Desire/Desire-Sub-Worker订阅器支持](https://github.com/DesireOr2/Desire-Sub-Worker)
+*   **ProxyIP 创作支持**（源代码不支持反代）：
+    *   [mingyu/mingyu大佬](https://github.com/ymyuuu?tab=repositories)
+    *   [COMLiang/天诚大佬](https://t.me/COMLiang)
+    *   [ursyre/syre大佬](https://t.me/ursyre)（感谢整合了https/socks5/proxyip的全部反代支持）
+*   **ECH 参考支持**：
+    *   [cmliu/edgetunnel项目](https://github.com/cmliu/edgetunnel)（借鉴参考ECH）
+    *   [byjoey/cfnew项目 少年你相信光吗](https://github.com/byJoey/cfnew)（借鉴参考ECH）
+*   **Telegram 交流群**：[zyssadmin](https://t.me/zyssadmin)（始于天诚技术交流群创立这个项目）
+*   **Cloudflare Docs**：[Support](https://developers.cloudflare.com/)
+
+---
+
 ## 目录
 
+- [开源代码引用](#-开源代码引用)
 - [项目简介](#项目简介)
 - [功能一览](#功能一览)
 - [界面预览](#界面预览)
@@ -18,7 +58,6 @@
 - [后台管理面板](#后台管理面板)
 - [GrainTCP 内核参数](#graintcp-内核参数)
 - [常见问题](#常见问题)
-- [致谢](#致谢)
 - [免责声明](#免责声明)
 
 ---
@@ -935,17 +974,6 @@ https://example.com/speed.csv
 CSV 需包含 IP、端口、TLS 列，配合 `DLS` 环境变量过滤低速节点。
 
 Snippets 版只支持单个 ProxyIP（`PIP` 配置项）。
-
----
-
-## 致谢
-
-- [Alexandre_Kojeve](https://t.me/Alexandre_Kojeve) — 原版 AK1.32 源代码作者
-- [GrainTCP](https://github.com/nickerwen/graincf) — 高性能代理内核
-- [ToiCF/CF-Workers-TURN](https://github.com/ToiCF/CF-Workers-TURN) — TURN 协议支持
-- [ym94203](https://t.me/ym94203) — 后台管理面板
-- [COMLiang](https://t.me/COMLiang) — ProxyIP 支持
-- [cmliu/WorkerVless2sub](https://github.com/cmliu/WorkerVless2sub) — 优选订阅生成器
 
 ---
 
