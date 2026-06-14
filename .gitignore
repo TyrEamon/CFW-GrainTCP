@@ -1,0 +1,6 @@
+# 本地备份 / 临时文件，不纳入仓库
+*.bak
+*.txt
+.dev.vars
+.wrangler/
+node_modules/
