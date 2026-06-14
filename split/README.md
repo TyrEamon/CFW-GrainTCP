@@ -5,6 +5,7 @@ This folder keeps the original `worker.js` safe and adds a separated deployment 
 - `backend-worker.js`: Worker backend with the original proxy, subscription, and legacy dashboard routes still present.
 - `frontend-worker.js`: Worker frontend that serves the generated panel and injects the backend URL from Cloudflare environment variables.
 - `panel/index.html`: static dashboard for Cloudflare Pages or any static host. It is generated from the original `worker.js` frontend templates and only adds a sidebar "后端地址" section.
+- `wrangler.frontend.jsonc`: Wrangler config for Git-connected frontend Worker builds.
 - `wrangler.backend.example.toml`: optional Wrangler example for the backend Worker.
 
 ## Backend
@@ -56,6 +57,14 @@ Legacy routes still work:
 ## Frontend Worker with CF variables
 
 Deploy `split/frontend-worker.js` as the frontend Worker.
+
+For Cloudflare Workers Builds, use:
+
+```bash
+npx wrangler deploy --config split/wrangler.frontend.jsonc --keep-vars
+```
+
+Keep the build command empty. The config preserves the frontend route and Worker name; `--keep-vars` keeps dashboard-set variables such as `PANEL_BACKEND`.
 
 Set this variable on the frontend Worker:
 

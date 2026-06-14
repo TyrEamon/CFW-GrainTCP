@@ -1,6 +1,6 @@
 name = "graintcp-backend"
 main = "backend-worker.js"
-compatibility_date = "2026-06-15"
+compatibility_date = "2026-06-14"
 
 [vars]
 PANEL_ORIGIN = "https://your-panel.pages.dev"
