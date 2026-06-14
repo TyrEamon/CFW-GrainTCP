@@ -74,6 +74,14 @@ PANEL_BACKEND=https://your-backend-worker.example.com
 
 `BACKEND_URL` and `DEFAULT_BACKEND` are also accepted as aliases. Open the frontend URL and log in with the backend Worker's `WEB_PASSWORD`.
 
+Optional frontend-only login background:
+
+```text
+PANEL_LOGIN_BG=https://rapi.mtcacg.top/ri/h/1326.webp
+```
+
+`PANEL_BG_LOGIN` and `BG_LOGIN` are also accepted as aliases. This image is applied immediately by the frontend Worker before the backend theme API finishes loading.
+
 If you deploy only `panel/index.html` as a static Pages upload, Cloudflare runtime variables are not available to the HTML. Use `frontend-worker.js` when you want the backend address to come from the Cloudflare dashboard.
 
 ## Static frontend fallback

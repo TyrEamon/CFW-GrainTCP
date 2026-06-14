@@ -59,6 +59,14 @@ vm.runInContext(source.slice(dashStart), context);
 const token = (name) => `__PANEL_${name}__`;
 const sysParams = { tgToken: '', tgId: '', cfId: '', cfToken: '', cfMail: '', cfKey: '' };
 
+function addMobileWebAppMeta(html) {
+  if (html.includes('name="mobile-web-app-capable"')) return html;
+  return html.replace(
+    '<meta name="apple-mobile-web-app-capable" content="yes">',
+    '<meta name="apple-mobile-web-app-capable" content="yes">\n    <meta name="mobile-web-app-capable" content="yes">'
+  );
+}
+
 let dashboard = context.dashPage(
   token('HOST'),
   token('UUID'),
@@ -92,6 +100,7 @@ let dashboard = context.dashPage(
   72,
   55
 );
+dashboard = addMobileWebAppMeta(dashboard);
 
 dashboard = dashboard
   .replace('status-dot off', `status-dot ${token('TG_STATE')}`)
@@ -170,7 +179,7 @@ dashboard = dashboard.replace(
 );
 
 const apiAdapter = `
-        const PANEL_BACKEND = "__PANEL_BACKEND__";
+        var PANEL_BACKEND = "__PANEL_BACKEND__";
         function panelNormalizeBackend(v) {
             let s = String(v || '').trim();
             if (!s) return '';
@@ -184,11 +193,26 @@ const apiAdapter = `
         }
         async function apiFetch(path, options) {
             const init = Object.assign({ credentials: 'include' }, options || {});
+            const timeoutMs = Math.max(1000, parseInt(init.timeoutMs || 15000, 10) || 15000);
+            delete init.timeoutMs;
             const headers = new Headers(init.headers || {});
             headers.set('Accept', 'application/json');
             if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
             init.headers = headers;
-            return fetch(panelApiUrl(path), init);
+            let timeoutId = null;
+            if (!init.signal && typeof AbortController !== 'undefined') {
+                const controller = new AbortController();
+                init.signal = controller.signal;
+                timeoutId = setTimeout(function() { controller.abort(); }, timeoutMs);
+            }
+            try {
+                return await fetch(panelApiUrl(path), init);
+            } catch (e) {
+                if (e && e.name === 'AbortError') throw new Error('后端响应超时，请检查后端 Worker 是否正常。');
+                throw e;
+            } finally {
+                if (timeoutId) clearTimeout(timeoutId);
+            }
         }
         function saveBackendAddress() {
             const next = panelNormalizeBackend(document.getElementById('panelBackendUrl')?.value);
@@ -216,6 +240,11 @@ const apiAdapter = `
 dashboard = dashboard.replace(
   /const UUID = "__PANEL_UUID__"; const CONVERTER = "__PANEL_CONVERTER__"; const CLIENT_IP = "__PANEL_CLIENT_IP__"; const HAS_AUTH = true;/,
   `var UUID = "__PANEL_UUID__"; var CONVERTER = "__PANEL_CONVERTER__"; var CLIENT_IP = "__PANEL_CLIENT_IP__"; var HAS_AUTH = true;${apiAdapter}`
+);
+
+dashboard = dashboard.replace(
+  'if (cbScope && cbName && cbScope[cbName]) delete cbScope[cbName];',
+  'if (cbScope && cbName) { cbScope[cbName] = function() {}; setTimeout(function() { try { delete cbScope[cbName]; } catch(e) { cbScope[cbName] = undefined; } }, 30000); }'
 );
 
 dashboard = dashboard
@@ -253,6 +282,7 @@ let login = context.loginPage(
   72,
   55
 );
+login = addMobileWebAppMeta(login);
 login = login.replace(/onclick="window\.open\('[^']*', '_blank'\)"/, 'onclick="openSite()"');
 login = login.replace(
   /<button class="btn-unlock" onclick="verify\(\)">([\s\S]*?)<\/button>/,
@@ -285,6 +315,7 @@ const loginScript = `<script>
         const FALLBACK_LINKS = ${JSON.stringify(fallbackLinks)};
         const FALLBACK_TITLE = ${JSON.stringify(constants.LOGIN_PAGE_TITLE)};
         const DEFAULT_BACKEND = window.__PANEL_DEFAULT_BACKEND__ || "";
+        const DEFAULT_LOGIN_BG = window.__PANEL_DEFAULT_LOGIN_BG__ || "";
         const FIRST_RUN_PASSWORD = ${JSON.stringify(constants.WEB_PASSWORD)};
         let panelLinks = Object.assign({}, FALLBACK_LINKS);
         let loginBusy = false;
@@ -355,11 +386,26 @@ const loginScript = `<script>
             const base = normalizeBackend(explicitBase || getBackend());
             if (!base) throw new Error('后端 API 不可用');
             const init = Object.assign({ credentials: 'include' }, options || {});
+            const timeoutMs = Math.max(1000, parseInt(init.timeoutMs || 15000, 10) || 15000);
+            delete init.timeoutMs;
             const headers = new Headers(init.headers || {});
             headers.set('Accept', 'application/json');
             if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
             init.headers = headers;
-            return fetch(base + '/api' + (path.startsWith('/') ? path : '/' + path), init);
+            let timeoutId = null;
+            if (!init.signal && typeof AbortController !== 'undefined') {
+                const controller = new AbortController();
+                init.signal = controller.signal;
+                timeoutId = setTimeout(function() { controller.abort(); }, timeoutMs);
+            }
+            try {
+                return await fetch(base + '/api' + (path.startsWith('/') ? path : '/' + path), init);
+            } catch (e) {
+                if (e && e.name === 'AbortError') throw new Error('后端响应超时，请检查后端 Worker 或 PANEL_BACKEND。');
+                throw e;
+            } finally {
+                if (timeoutId) clearTimeout(timeoutId);
+            }
         }
 
         async function checkBackendAddress(base) {
@@ -438,6 +484,13 @@ const loginScript = `<script>
             return '<style id="panel-theme-style">' + css + '</style>';
         }
 
+        function applyLoginBackground(bgUrl, glassA, scrimA) {
+            const url = String(bgUrl || '').trim();
+            if (!url) return;
+            document.getElementById('panel-theme-style')?.remove();
+            document.body.insertAdjacentHTML('afterbegin', buildBgStyle(url, glassA, scrimA, 'login'));
+        }
+
         async function loadTheme() {
             const base = getBackend();
             if (!base) return;
@@ -454,8 +507,7 @@ const loginScript = `<script>
                     document.querySelector('.login-logo')?.setAttribute('src', logo);
                 }
                 const bg = theme.background || {};
-                document.getElementById('panel-theme-style')?.remove();
-                document.body.insertAdjacentHTML('afterbegin', buildBgStyle(bg.login || '', bg.glassA, bg.scrimA, 'login'));
+                applyLoginBackground(bg.login || DEFAULT_LOGIN_BG, bg.glassA, bg.scrimA);
             } catch (e) {}
         }
 
@@ -582,6 +634,7 @@ const loginScript = `<script>
 
         window.onload = function() {
             generateStars();
+            applyLoginBackground(DEFAULT_LOGIN_BG);
             loadTheme();
             checkSession();
         };
@@ -593,9 +646,10 @@ login = login.replace(/<script>[\s\S]*?<\/script>\s*<\/body>/, `${loginScript}
 fs.writeFileSync(outPath, login, 'utf8');
 const frontendWorker = `const PANEL_HTML = ${scriptLiteral(login)};
 
-function injectPanelBackend(html, backend) {
+function injectPanelRuntime(html, backend, loginBg) {
   const safeBackend = String(backend || '').trim();
-  const injection = '<script>window.__PANEL_DEFAULT_BACKEND__=' + JSON.stringify(safeBackend) + ';</script>';
+  const safeLoginBg = String(loginBg || '').trim();
+  const injection = '<script>window.__PANEL_DEFAULT_BACKEND__=' + JSON.stringify(safeBackend) + ';window.__PANEL_DEFAULT_LOGIN_BG__=' + JSON.stringify(safeLoginBg) + ';</script>';
   return html.replace(/<script>\\s*const DASHBOARD_TEMPLATE/, injection + '\\n    <script>\\n        const DASHBOARD_TEMPLATE');
 }
 
@@ -606,7 +660,8 @@ export default {
       return new Response('Not Found', { status: 404 });
     }
     const backend = env.PANEL_BACKEND || env.BACKEND_URL || env.DEFAULT_BACKEND || '';
-    return new Response(injectPanelBackend(PANEL_HTML, backend), {
+    const loginBg = env.PANEL_LOGIN_BG || env.PANEL_BG_LOGIN || env.BG_LOGIN || '';
+    return new Response(injectPanelRuntime(PANEL_HTML, backend, loginBg), {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
