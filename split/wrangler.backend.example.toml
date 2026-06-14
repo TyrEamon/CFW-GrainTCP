@@ -1,0 +1,13 @@
+name = "graintcp-backend"
+main = "backend-worker.js"
+compatibility_date = "2026-06-15"
+
+[vars]
+PANEL_ORIGIN = "https://your-panel.pages.dev"
+
+# Keep this binding name if your current worker code uses env.DB.
+# Replace database_name and database_id with your existing D1 database.
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "your-d1-name"
+# database_id = "00000000-0000-0000-0000-000000000000"
