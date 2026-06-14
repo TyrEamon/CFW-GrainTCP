@@ -254,6 +254,20 @@ let login = context.loginPage(
   55
 );
 login = login.replace(/onclick="window\.open\('[^']*', '_blank'\)"/, 'onclick="openSite()"');
+login = login.replace(
+  /<button class="btn-unlock" onclick="verify\(\)">([\s\S]*?)<\/button>/,
+  '<button class="btn-unlock" id="loginButton" onclick="verify()"><span class="login-btn-text">$1</span><span class="login-spinner" aria-hidden="true"></span></button>'
+);
+login = login.replace(
+  '</style>',
+  `        .btn-unlock{display:flex;align-items:center;justify-content:center;gap:8px}
+        .btn-unlock[disabled]{cursor:not-allowed;opacity:.78}
+        .login-spinner{display:none;width:14px;height:14px;flex:none;border:2px solid rgba(255,255,255,.45);border-top-color:currentColor;border-radius:50%;animation:loginSpin .75s linear infinite}
+        .btn-unlock.loading .login-spinner{display:inline-block}
+        @keyframes loginSpin{to{transform:rotate(360deg)}}
+        @media (prefers-reduced-motion:reduce){.login-spinner{animation:none}}
+    </style>`
+);
 
 function scriptLiteral(text) {
   return JSON.stringify(text).replace(/<\/script/gi, '<\\/script');
@@ -273,6 +287,19 @@ const loginScript = `<script>
         const DEFAULT_BACKEND = window.__PANEL_DEFAULT_BACKEND__ || "";
         const FIRST_RUN_PASSWORD = ${JSON.stringify(constants.WEB_PASSWORD)};
         let panelLinks = Object.assign({}, FALLBACK_LINKS);
+        let loginBusy = false;
+
+        function setLoginLoading(loading) {
+            loginBusy = !!loading;
+            const btn = document.getElementById('loginButton');
+            const input = document.getElementById('pwd');
+            if (btn) {
+                btn.disabled = loginBusy;
+                btn.classList.toggle('loading', loginBusy);
+                btn.setAttribute('aria-busy', loginBusy ? 'true' : 'false');
+            }
+            if (input) input.disabled = loginBusy;
+        }
 
         function generateStars() {
             const starsContainer = document.getElementById('starsContainer');
@@ -510,6 +537,7 @@ const loginScript = `<script>
         }
 
         async function verify() {
+            if (loginBusy) return;
             const p = document.getElementById("pwd").value;
             if(!p) return;
             const base = getBackend();
@@ -521,11 +549,14 @@ const loginScript = `<script>
                 alert('首次初始化密码错误。没有后端地址时，只能用模板密码进入后端地址初始化。');
                 return;
             }
+            let loadedDashboard = false;
+            setLoginLoading(true);
             try {
                 const res = await apiFetch('/login', { method: 'POST', body: JSON.stringify({ password: p }) }, base);
                 if (!res.ok) throw new Error('密码错误或 CORS 未放行');
                 sessionStorage.setItem("is_active", "1");
                 await loadDashboard();
+                loadedDashboard = true;
             } catch (e) {
                 if (p === FIRST_RUN_PASSWORD) {
                     resetBackend();
@@ -533,6 +564,8 @@ const loginScript = `<script>
                     return;
                 }
                 alert(e.message || e);
+            } finally {
+                if (!loadedDashboard) setLoginLoading(false);
             }
         }
 
