@@ -19,6 +19,7 @@ const TG_GROUP_URL = "https://t.me/zyssadmin";       // 登录页“交流群”
 const SITE_URL = "https://blog.mtcacg.top";          // 登录页“我的博客”链接
 const GITHUB_URL = "https://github.com/TyrEamon/CFW-GrainTCP"; // 登录页“Github项目”链接
 const PROXY_CHECK_URL = "https://kaic.hidns.co/";    // 后台 ProxyIP 检测跳转地址
+const LOGO_URI = "data:image/png;base64,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"; // 站点 logo（内嵌 base64）
 
 // --- 订阅转换配置文件 (支持环境变量覆盖) ---
 const CLASH_CONFIG = 'htt'+'ps://raw.git'+'hub'+'usercontent.com/cm'+'liu/ACL4'+'SSR/main/Cl'+'ash/config/ACL4SSR_Online_Full_MultiMode.ini'; //修改转换订阅配置文件ini
@@ -1416,6 +1417,7 @@ function loginPage(tgGroup, siteUrl, githubUrl, pageTitle, bgUrl, glassA, scrimA
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>${_s(pageTitle)}</title>
+    <link rel="icon" href="${LOGO_URI}">
     <style>
                 /* [01] TOKENS —— 登录页独立文档，需各自带 token（与 dashPage 同套） */
         :root{
@@ -1437,6 +1439,7 @@ function loginPage(tgGroup, siteUrl, githubUrl, pageTitle, bgUrl, glassA, scrimA
         body{background:var(--page-bg) fixed;color:var(--text);font-family:var(--font-sans);display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
         .stars,.star,.meteor,.glass-shards,.shard{display:none!important}
         .glass-box{position:relative;z-index:10;background:var(--card-bg);border:1px solid var(--border);box-shadow:var(--shadow-lg);padding:36px 32px;border-radius:var(--radius-xl);text-align:center;width:100%;max-width:380px}
+        .login-logo{width:64px;height:64px;border-radius:16px;display:block;margin:0 auto 18px;box-shadow:var(--shadow-lg);object-fit:cover}
         h2{margin-bottom:var(--s-6);font-weight:var(--fw-bold);font-size:1.4rem;color:var(--text);display:flex;align-items:center;justify-content:center;gap:8px}
         input{width:100%;padding:11px 14px;margin-bottom:var(--s-4);border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-darker);color:var(--text);text-align:center;font-size:var(--fs-md);outline:none;transition:border-color var(--dur),box-shadow var(--dur)}
         input::placeholder{color:var(--text-subtle)}
@@ -1468,6 +1471,7 @@ function loginPage(tgGroup, siteUrl, githubUrl, pageTitle, bgUrl, glassA, scrimA
     </div>
 
     <div class="glass-box">
+        <img class="login-logo" src="${LOGO_URI}" alt="logo">
         <h2>管理员登陆</h2>
         <input type="password" id="pwd" placeholder="请输入密码" autofocus autocomplete="new-password" onkeypress="if(event.keyCode===13)verify()">
         <div class="btn-group">
@@ -1533,6 +1537,7 @@ function dashPage(host, uuid, proxyip, subpass, subdomain, converter, env, clien
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>${safeVal(dashTitle)}</title>
+    <link rel="icon" href="${LOGO_URI}">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { display: none; opacity: 0; transition: opacity 0.3s; overflow-x: hidden; position: relative; }
@@ -1851,6 +1856,7 @@ function dashPage(host, uuid, proxyip, subpass, subdomain, converter, env, clien
         .nav-item .icon,.card-title .icon{width:18px;height:18px;font-size:0;text-align:initial}
         .logo-icon{width:30px;height:30px;color:var(--brand);font-size:0;line-height:0;display:inline-flex}
         .logo-icon svg{width:30px;height:30px;stroke:var(--brand);fill:none;stroke-width:1.8}
+        .logo-icon img{width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm);display:block}
         .tool-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2}
         .btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.2;flex-shrink:0}
         .ico-inline{width:14px;height:14px;vertical-align:-2px;stroke:currentColor;fill:none;stroke-width:2;display:inline-block}
@@ -1872,17 +1878,36 @@ function dashPage(host, uuid, proxyip, subpass, subdomain, converter, env, clien
           .nav-item{flex:1;min-width:110px;justify-content:center}
         }
         @media(max-width:768px){
-          .container{padding:64px 10px 12px}
-          .nav-menu{flex-direction:column}
-          .nav-item{width:100%}
-          .top-nav{top:10px;right:10px}
+          .container{padding:60px 10px 12px;gap:var(--s-3)}
+          .sidebar{padding:var(--s-3)}
+          .logo{margin-bottom:var(--s-3);padding-bottom:var(--s-3)}
+          .logo-icon,.logo-icon svg{width:24px;height:24px}
+          .nav-menu{flex-direction:row;flex-wrap:wrap;gap:6px}
+          .nav-item{flex:1 1 auto;min-width:96px;height:40px;font-size:var(--fs-sm)}
+          .nav-group-label{flex:1 0 100%;padding:6px 10px 2px}
+          .top-nav{top:8px;right:8px;gap:4px;padding:5px}
+          .tool-btn{width:36px;height:36px}
           .tool-btn::before{display:none}
-          .stats-panel{grid-template-columns:1fr}
+          .card,.sphere-card{padding:var(--s-4)}
           .network-cards-grid,.latency-cards-grid{grid-template-columns:1fr}
           .input-group-row{flex-direction:column;align-items:stretch}
           .btn-group{flex-direction:column}
+          .btn-group .btn{min-width:0}
           .log-entry{flex-direction:column;align-items:flex-start;gap:4px}
           .log-time,.log-ip,.log-loc{width:100%}
+          .modal-content{padding:var(--s-5);max-height:90vh;overflow-y:auto}
+          .modal-btns{flex-direction:column}
+          .wl-table th,.wl-table td{padding:8px;word-break:break-all}
+          .slider-row input[type=number]{width:60px}
+        }
+        @media(max-width:480px){
+          .container{padding:56px 8px 10px}
+          .nav-item{min-width:84px;height:38px}
+          .card,.sphere-card{padding:14px}
+          .card-title{font-size:var(--fs-md);margin-bottom:var(--s-4)}
+          .logo-text{font-size:var(--fs-md)}
+          .modal{padding:var(--s-2)}
+          .modal-content{padding:var(--s-4)}
         }
     
     </style>
@@ -1941,7 +1966,7 @@ function dashPage(host, uuid, proxyip, subpass, subdomain, converter, env, clien
         <!-- 左侧边栏 -->
         <div class="sidebar" id="sidebar">
             <div class="logo">
-                <div class="logo-icon"><svg viewBox="0 0 24 24"><use href="#i-gem"/></svg></div>
+                <div class="logo-icon"><img src="${LOGO_URI}" alt="logo"></div>
                 <div class="logo-text-wrap">
                     <div class="logo-text">CFW 控制台</div>
                     <div class="logo-sub">CFW DASHBOARD</div>
