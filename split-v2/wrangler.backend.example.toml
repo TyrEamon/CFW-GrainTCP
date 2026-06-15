@@ -1,0 +1,30 @@
+﻿name = "graintcp-backend-lite"
+main = "backend-worker-lite.js"
+compatibility_date = "2026-06-14"
+
+# === 环境变量配置（必填） ===
+[vars]
+# 基础配置
+UUID = "your-uuid-here"
+SUB_PASSWORD = "your-sub-password"
+WEB_PASSWORD = "your-web-password"
+
+# 网络配置
+PROXY_IP = "proxyip.example.com"
+SUB_DOMAIN = "https://owo.o00o.ooo/"
+CONVERTER = "https://subapi.example.net"
+
+# Telegram Bot（可选）
+TG_BOT_TOKEN = ""
+TG_CHAT_ID = ""
+
+# ECH 配置
+ECH = "true"
+ECH_DNS = "https://odvr.nic.cz/doh"
+ECH_SNI = "cloudflare-ech.com"
+
+# === 注意事项 ===
+# 1. Lite 版本不需要 D1 绑定
+# 2. 所有配置从环境变量读取
+# 3. 日志和统计使用内存存储（重启后重置）
+# 4. 支持新接口：/api/health, /api/logs

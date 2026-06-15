@@ -57,6 +57,7 @@ vm.runInContext(source.slice(loginStart, dashStart), context);
 vm.runInContext(source.slice(dashStart), context);
 
 const token = (name) => `__PANEL_${name}__`;
+const jsonToken = (name) => `__PANEL_${name}_JSON__`;
 const sysParams = { tgToken: '', tgId: '', cfId: '', cfToken: '', cfMail: '', cfKey: '' };
 
 function addMobileWebAppMeta(html) {
@@ -90,7 +91,7 @@ let dashboard = context.dashPage(
   token('CF_KEY'),
   sysParams,
   token('DASH_TITLE'),
-  token('PROXY_CHECK_URL'),
+  jsonToken('PROXY_CHECK_URL'),
   token('DLS'),
   'false',
   token('ECH_SNI'),
@@ -101,6 +102,38 @@ let dashboard = context.dashPage(
   55
 );
 dashboard = addMobileWebAppMeta(dashboard);
+dashboard = dashboard.replace('window.open("__PANEL_PROXY_CHECK_URL_JSON__", "_blank")', 'window.open(__PANEL_PROXY_CHECK_URL_JSON__, "_blank")');
+
+dashboard = dashboard.replace(
+  `                    <div class="input-block">
+                        <label>Worker 域名 (SNI/Host)</label>
+                        <input type="text" id="hostDom" value="\${host}" oninput="updateLink()">
+                    </div>`,
+  `                    <div class="input-block">
+                        <label>Worker 域名 (SNI/Host)</label>
+                        <select id="hostBackendSelect" onchange="applyHostBackendSelection(this.value)" style="margin-bottom:8px"></select>
+                        <input type="text" id="hostDom" value="\${host}" oninput="renderHostBackendSelect();updateLink()">
+                    </div>`
+);
+
+dashboard = dashboard.replace(
+  /(\s*)<div class="sphere-labels">\s*<div class="sphere-label">[\s\S]*?<\/div>\s*<div class="sphere-subtitle" id="reqSubtitle">[\s\S]*?<\/div>\s*<\/div>/,
+  `$1<select id="cfStatsProfileSelect" onchange="selectCfStatsProfile(this.value)" style="max-width:220px;margin:0 0 10px auto;display:block"></select>$&`
+);
+
+dashboard = dashboard.replace(
+  /(\s*)<div style="margin-bottom:20px;padding-bottom:15px;border-bottom:1px solid var\(--border\)">\s*<label>[^<]*Account ID \+ API Token<\/label>/,
+  `$1<div style="margin-bottom:20px;padding-bottom:15px;border-bottom:1px solid var(--border)">
+                <label>已保存 CF 配置</label>
+                <select id="cfProfileSelect" onchange="loadCfProfile(this.value)" style="margin-bottom:10px"></select>
+                <input type="text" id="cfProfileName" placeholder="配置名称，例如：主账号 / 小号" style="margin-bottom:10px">
+                <div class="btn-group" style="margin-top:0;margin-bottom:10px">
+                    <button class="btn btn-success" onclick="saveCfProfile()">保存配置档</button>
+                    <button class="btn btn-secondary" onclick="deleteCfProfile()">删除配置档</button>
+                </div>
+            </div>$&`
+);
+
 
 dashboard = dashboard
   .replace('status-dot off', `status-dot ${token('TG_STATE')}`)
@@ -114,12 +147,12 @@ dashboard = dashboard
   .replace(/<span id="fpDisplay" style="font-size:0\.8rem;color:var\(--glass-green\);font-weight:600">[\s\S]*?<\/span>/,
     '<span id="fpDisplay" style="font-size:0.8rem;color:var(--glass-green);font-weight:600">__PANEL_FP_DISPLAY__</span>')
   .replace(/const ECH_ON_INIT = false;/,
-    'const ECH_ON_INIT = __PANEL_ECH_ON__;');
+    'const ECH_ON_INIT = __PANEL_ECH_ON_JSON__;');
 
 dashboard = dashboard
   .replace(
-    'const ECH_ON_INIT = __PANEL_ECH_ON__; const ECH_SNI_INIT = "__PANEL_ECH_SNI__"; const ECH_DNS_INIT = "__PANEL_ECH_DNS__";',
-    'var ECH_ON_INIT = __PANEL_ECH_ON__; var ECH_SNI_INIT = "__PANEL_ECH_SNI__"; var ECH_DNS_INIT = "__PANEL_ECH_DNS__";'
+    'const ECH_ON_INIT = __PANEL_ECH_ON_JSON__; const ECH_SNI_INIT = "__PANEL_ECH_SNI__"; const ECH_DNS_INIT = "__PANEL_ECH_DNS__";',
+    'var ECH_ON_INIT = __PANEL_ECH_ON_JSON__; var ECH_SNI_INIT = __PANEL_ECH_SNI_JSON__; var ECH_DNS_INIT = __PANEL_ECH_DNS_JSON__;'
   )
   .replace(
     'let _latencyTimer = null, _logTimer = null, _networkLoaded = false;',
@@ -158,14 +191,23 @@ const backendSection = `
                 <div class="card">
                     <div class="card-title"><span class="icon"><svg viewBox="0 0 24 24"><use href="#i-cloud"/></svg></span> 后端地址</div>
                     <div class="input-block">
+                        <label>已保存后端地址</label>
+                        <select id="panelBackendSelect" onchange="selectPanelBackendAddress(this.value)"></select>
+                    </div>
+                    <div class="input-block">
+                        <label>名称</label>
+                        <input type="text" id="panelBackendName" placeholder="例如：美国后端 / 香港后端">
+                    </div>
+                    <div class="input-block">
                         <label>后端 Worker 地址</label>
                         <input type="text" id="panelBackendUrl" placeholder="https://proxylink.example.com">
                     </div>
                     <div class="btn-group">
-                        <button class="btn btn-success" onclick="saveBackendAddress()"><svg viewBox="0 0 24 24"><use href="#i-save"/></svg> 保存后端地址</button>
-                        <button class="btn btn-secondary" onclick="testBackendAddress()">测试连接</button>
+                        <button class="btn btn-success" onclick="saveBackendAddress()"><svg viewBox="0 0 24 24"><use href="#i-save"/></svg> 保存地址</button>
+                        <button class="btn btn-secondary" onclick="deleteBackendAddress()">删除地址</button>
+                        <button class="btn btn-primary" onclick="testBackendAddress()">测试连接</button>
                     </div>
-                    <div style="font-size:var(--fs-xs);color:var(--text-dim);margin-top:12px;line-height:1.6">静态面板会把登录、统计、日志和配置保存请求发送到这里。保存后会重新读取后端配置。</div>
+                    <div style="font-size:var(--fs-xs);color:var(--text-dim);margin-top:12px;line-height:1.6">这里保存的是订阅节点用的 Worker 域名池，只会同步到“Worker 域名 (SNI/Host)”下拉；登录、统计、日志和配置仍走当前前端面板地址。</div>
                 </div>
             </div>`;
 
@@ -179,7 +221,8 @@ dashboard = dashboard.replace(
 );
 
 const apiAdapter = `
-        var PANEL_BACKEND = "__PANEL_BACKEND__";
+        var PANEL_BACKEND = __PANEL_BACKEND_JSON__;
+        var PANEL_CF_CONFIGS_INIT = __PANEL_CF_CONFIGS_JSON__;
         function panelNormalizeBackend(v) {
             let s = String(v || '').trim();
             if (!s) return '';
@@ -208,38 +251,266 @@ const apiAdapter = `
             try {
                 return await fetch(panelApiUrl(path), init);
             } catch (e) {
-                if (e && e.name === 'AbortError') throw new Error('后端响应超时，请检查后端 Worker 是否正常。');
+                if (e && e.name === 'AbortError') throw new Error('后端响应超时，请检查当前前端 Worker API。');
                 throw e;
             } finally {
                 if (timeoutId) clearTimeout(timeoutId);
             }
         }
+        function backendProfileId(url) {
+            return panelNormalizeBackend(url).toLowerCase();
+        }
+        function backendHostFromUrl(url) {
+            const normalized = panelNormalizeBackend(url);
+            if (!normalized) return '';
+            try { return new URL(normalized).host; }
+            catch (e) { return normalized.replace(/^https?:\\/\\//i, '').split('/')[0]; }
+        }
+        function getPanelBackendProfiles() {
+            let list = [];
+            try { list = JSON.parse(localStorage.getItem('grainPanelSubBackends') || '[]') || []; }
+            catch (e) { list = []; }
+            const legacy = panelNormalizeBackend(localStorage.getItem('grainPanelBackend') || '');
+            if (legacy && !list.some(item => backendProfileId(item.url) === backendProfileId(legacy))) {
+                list.unshift({ name: backendHostFromUrl(legacy), url: legacy });
+                localStorage.removeItem('grainPanelBackend');
+                setPanelBackendProfiles(list);
+            }
+            return list
+                .map(item => ({ name: String(item.name || '').trim(), url: panelNormalizeBackend(item.url || item.domain || '') }))
+                .filter(item => item.url);
+        }
+        function setPanelBackendProfiles(list) {
+            const seen = new Set();
+            const clean = [];
+            (list || []).forEach(function(item) {
+                const url = panelNormalizeBackend(item && (item.url || item.domain));
+                const id = backendProfileId(url);
+                if (!id || seen.has(id)) return;
+                seen.add(id);
+                clean.push({ name: String(item.name || backendHostFromUrl(url) || '后端地址').trim(), url });
+            });
+            localStorage.setItem('grainPanelSubBackends', JSON.stringify(clean));
+            return clean;
+        }
+        function renderPanelBackendControls() {
+            const list = getPanelBackendProfiles();
+            const select = document.getElementById('panelBackendSelect');
+            if (select) {
+                select.innerHTML = '<option value="">新建后端地址</option>' + list.map(function(item) {
+                    const label = (item.name || backendHostFromUrl(item.url)) + ' - ' + backendHostFromUrl(item.url);
+                    return '<option value="' + esc(item.url) + '">' + esc(label) + '</option>';
+                }).join('');
+            }
+            renderHostBackendSelect();
+        }
+        function selectPanelBackendAddress(url) {
+            const normalized = panelNormalizeBackend(url);
+            const item = getPanelBackendProfiles().find(profile => backendProfileId(profile.url) === backendProfileId(normalized));
+            const nameInput = document.getElementById('panelBackendName');
+            const urlInput = document.getElementById('panelBackendUrl');
+            if (nameInput) nameInput.value = item ? item.name : '';
+            if (urlInput) urlInput.value = item ? item.url : '';
+        }
         function saveBackendAddress() {
             const next = panelNormalizeBackend(document.getElementById('panelBackendUrl')?.value);
             if (!next) { alert('请填写后端 Worker 地址'); return; }
-            localStorage.setItem('grainPanelBackend', next);
-            alert('后端地址已保存');
-            location.reload();
+            const name = String(document.getElementById('panelBackendName')?.value || backendHostFromUrl(next) || '后端地址').trim();
+            const list = getPanelBackendProfiles().filter(item => backendProfileId(item.url) !== backendProfileId(next));
+            list.unshift({ name, url: next });
+            setPanelBackendProfiles(list);
+            renderPanelBackendControls();
+            const select = document.getElementById('panelBackendSelect');
+            if (select) select.value = next;
+            applyHostBackendSelection(backendHostFromUrl(next));
+            alert('后端地址已保存，仅用于订阅 Host/SNI 下拉。');
+        }
+        function deleteBackendAddress() {
+            const raw = panelNormalizeBackend(document.getElementById('panelBackendUrl')?.value || document.getElementById('panelBackendSelect')?.value);
+            if (!raw) { alert('请选择要删除的后端地址'); return; }
+            if (!confirm('请选择要删除的后端地址')) return;
+            setPanelBackendProfiles(getPanelBackendProfiles().filter(item => backendProfileId(item.url) !== backendProfileId(raw)));
+            const nameInput = document.getElementById('panelBackendName');
+            const urlInput = document.getElementById('panelBackendUrl');
+            if (nameInput) nameInput.value = '';
+            if (urlInput) urlInput.value = '';
+            renderPanelBackendControls();
         }
         async function testBackendAddress() {
-            const next = panelNormalizeBackend(document.getElementById('panelBackendUrl')?.value || PANEL_BACKEND);
+            const next = panelNormalizeBackend(document.getElementById('panelBackendUrl')?.value || document.getElementById('panelBackendSelect')?.value);
             if (!next) { alert('请填写后端 Worker 地址'); return; }
             try {
-                const res = await fetch(next + '/api/session', { credentials: 'include' });
-                alert(res.ok ? '连接正常' : '后端可访问，但当前未登录或未授权：' + res.status);
+                const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                const timer = controller ? setTimeout(function() { controller.abort(); }, 8000) : null;
+                const res = await fetch(next + '/api/health', { cache: 'no-store', signal: controller?.signal, headers: { 'Accept': 'application/json' } })
+                    .catch(() => fetch(next + '/api/theme', { cache: 'no-store', signal: controller?.signal, headers: { 'Accept': 'application/json' } }))
+                    .catch(() => fetch(next + '/', { cache: 'no-store', signal: controller?.signal }));
+                if (timer) clearTimeout(timer);
+                alert(res && res.ok ? '后端地址' : '请选择要删除的后端地址' + (res ? res.status : '无响应'));
             } catch (e) {
                 alert('连接失败：' + (e.message || e));
             }
         }
+        function renderHostBackendSelect() {
+            const select = document.getElementById('hostBackendSelect');
+            if (!select) return;
+            const hostInput = document.getElementById('hostDom');
+            const current = String(hostInput?.value || '').trim();
+            const list = getPanelBackendProfiles();
+            select.innerHTML = '<option value="">手动输入 / 当前值</option>' + list.map(function(item) {
+                const host = backendHostFromUrl(item.url);
+                const label = (item.name || host) + ' - ' + host;
+                return '<option value="' + esc(host) + '">' + esc(label) + '</option>';
+            }).join('');
+            if (current && Array.from(select.options).some(option => option.value === current)) select.value = current;
+        }
+        function applyHostBackendSelection(host) {
+            const value = String(host || '').trim();
+            if (!value) return;
+            const hostInput = document.getElementById('hostDom');
+            const subInput = document.getElementById('subDom');
+            if (hostInput) hostInput.value = value;
+            if (subInput) subInput.value = value;
+            updateLink();
+        }
+        function safeParseCfProfiles(raw) {
+            try {
+                const parsed = typeof raw === 'string' ? JSON.parse(raw || '[]') : raw;
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) { return []; }
+        }
+        function cfProfileId(profile) {
+            return String((profile && (profile.id || profile.name || profile.CF_ID || profile.CF_EMAIL)) || '').trim().toLowerCase();
+        }
+        function normalizeCfProfile(profile) {
+            const item = profile || {};
+            return {
+                id: String(item.id || item.name || item.CF_ID || item.CF_EMAIL || Date.now()).trim(),
+                name: String(item.name || item.id || item.CF_ID || item.CF_EMAIL || 'CF 配置').trim(),
+                CF_ID: String(item.CF_ID || item.cfId || item.cf_account_id || '').trim(),
+                CF_TOKEN: String(item.CF_TOKEN || item.cfToken || item.cf_api_token || '').trim(),
+                CF_EMAIL: String(item.CF_EMAIL || item.cfEmail || '').trim(),
+                CF_KEY: String(item.CF_KEY || item.cfKey || '').trim()
+            };
+        }
+        function readCfProfiles() {
+            let list = safeParseCfProfiles(localStorage.getItem('grainPanelCfConfigs'));
+            if (!list.length) list = safeParseCfProfiles(PANEL_CF_CONFIGS_INIT);
+            return list.map(normalizeCfProfile).filter(item => item.name && (item.CF_ID || item.CF_TOKEN || item.CF_EMAIL || item.CF_KEY));
+        }
+        function writeCfProfiles(list) {
+            const seen = new Set();
+            const clean = [];
+            (list || []).map(normalizeCfProfile).forEach(function(item) {
+                const id = cfProfileId(item);
+                if (!id || seen.has(id)) return;
+                seen.add(id);
+                clean.push(item);
+            });
+            localStorage.setItem('grainPanelCfConfigs', JSON.stringify(clean));
+            try { writeLocalPanelConfig({ CF_CONFIGS: JSON.stringify(clean) }); } catch (e) {}
+            apiFetch('/config', { method:'POST', body: JSON.stringify({ CF_CONFIGS: JSON.stringify(clean) }) }).catch(() => {});
+            renderCfProfileSelects(clean);
+            return clean;
+        }
+        function renderCfProfileSelects(list) {
+            const profiles = list || readCfProfiles();
+            const active = localStorage.getItem('grainPanelActiveCfProfile') || '';
+            const options = '<option value="">默认 CF 配置</option>' + profiles.map(function(item) {
+                const id = cfProfileId(item);
+                return '<option value="' + esc(id) + '">' + esc(item.name || id) + '</option>';
+            }).join('');
+            const modalSelect = document.getElementById('cfProfileSelect');
+            const statsSelect = document.getElementById('cfStatsProfileSelect');
+            if (modalSelect) modalSelect.innerHTML = '<option value="">默认 CF 配置</option>' + profiles.map(function(item) {
+                const id = cfProfileId(item);
+                return '<option value="' + esc(id) + '">' + esc(item.name || id) + '</option>';
+            }).join('');
+            if (statsSelect) {
+                statsSelect.innerHTML = options;
+                if (active && profiles.some(item => cfProfileId(item) === active)) statsSelect.value = active;
+            }
+        }
+        function collectCfProfile() {
+            const name = String(document.getElementById('cfProfileName')?.value || '').trim();
+            const cfId = val('cfAcc');
+            const cfToken = val('cfTok');
+            const cfMail = val('cfMail');
+            const cfKey = val('cfKey');
+            if ([cfId, cfToken, cfMail, cfKey].some(v => v && v.startsWith('****'))) {
+                alert('请先填写 CF 凭证');
+                return null;
+            }
+            if (!cfId && !cfToken && !cfMail && !cfKey) { alert('默认 CF 配置'); return null; }
+            return normalizeCfProfile({ name: name || cfId || cfMail || 'CF 配置', CF_ID: cfId, CF_TOKEN: cfToken, CF_EMAIL: cfMail, CF_KEY: cfKey });
+        }
+        function loadCfProfile(id) {
+            const profile = readCfProfiles().find(item => cfProfileId(item) === String(id || '').trim().toLowerCase());
+            const nameInput = document.getElementById('cfProfileName');
+            if (!profile) {
+                if (nameInput) nameInput.value = '';
+                return;
+            }
+            if (nameInput) nameInput.value = profile.name || '';
+            const map = { cfAcc: profile.CF_ID, cfTok: profile.CF_TOKEN, cfMail: profile.CF_EMAIL, cfKey: profile.CF_KEY };
+            Object.entries(map).forEach(function(entry) {
+                const el = document.getElementById(entry[0]);
+                if (el) el.value = entry[1] || '';
+            });
+        }
+        function saveCfProfile() {
+            const profile = collectCfProfile();
+            if (!profile) return;
+            const id = cfProfileId(profile);
+            const list = readCfProfiles().filter(item => cfProfileId(item) !== id);
+            list.unshift(profile);
+            writeCfProfiles(list);
+            localStorage.setItem('grainPanelActiveCfProfile', id);
+            renderCfProfileSelects();
+            const modalSelect = document.getElementById('cfProfileSelect');
+            const statsSelect = document.getElementById('cfStatsProfileSelect');
+            if (modalSelect) modalSelect.value = id;
+            if (statsSelect) statsSelect.value = id;
+            alert('CF 配置档已保存。');
+        }
+        function deleteCfProfile() {
+            const id = String(document.getElementById('cfProfileSelect')?.value || localStorage.getItem('grainPanelActiveCfProfile') || '').trim().toLowerCase();
+            if (!id) { alert('新建 CF 配置'); return; }
+            if (!confirm('请先填写 CF 凭证')) return;
+            writeCfProfiles(readCfProfiles().filter(item => cfProfileId(item) !== id));
+            if (localStorage.getItem('grainPanelActiveCfProfile') === id) localStorage.removeItem('grainPanelActiveCfProfile');
+            ['cfProfileName','cfAcc','cfTok','cfMail','cfKey'].forEach(function(inputId) { const el = document.getElementById(inputId); if (el) el.value = ''; });
+            renderCfProfileSelects();
+        }
+        function selectCfStatsProfile(id) {
+            const value = String(id || '').trim().toLowerCase();
+            if (value) localStorage.setItem('grainPanelActiveCfProfile', value);
+            else localStorage.removeItem('grainPanelActiveCfProfile');
+            updateStats();
+        }
+        function getActiveCfStatsPayload() {
+            const active = String(localStorage.getItem('grainPanelActiveCfProfile') || '').trim().toLowerCase();
+            if (!active) {
+                const cfg = readLocalPanelConfig();
+                const payload = {};
+                ['CF_ID','CF_TOKEN','CF_EMAIL','CF_KEY'].forEach(function(key) { if (cfg[key]) payload[key] = cfg[key]; });
+                return Object.keys(payload).length ? payload : null;
+            }
+            const profile = readCfProfiles().find(item => cfProfileId(item) === active);
+            if (!profile) return null;
+            const payload = {};
+            ['CF_ID','CF_TOKEN','CF_EMAIL','CF_KEY'].forEach(function(key) { if (profile[key]) payload[key] = profile[key]; });
+            return Object.keys(payload).length ? payload : null;
+        }
         window.addEventListener('DOMContentLoaded', () => {
-            const input = document.getElementById('panelBackendUrl');
-            if (input) input.value = PANEL_BACKEND;
+            renderPanelBackendControls();
+            renderCfProfileSelects();
         });
 `;
 
 dashboard = dashboard.replace(
   /const UUID = "__PANEL_UUID__"; const CONVERTER = "__PANEL_CONVERTER__"; const CLIENT_IP = "__PANEL_CLIENT_IP__"; const HAS_AUTH = true;/,
-  `var UUID = "__PANEL_UUID__"; var CONVERTER = "__PANEL_CONVERTER__"; var CLIENT_IP = "__PANEL_CLIENT_IP__"; var HAS_AUTH = true;${apiAdapter}`
+  `var UUID = __PANEL_UUID_JSON__; var CONVERTER = __PANEL_CONVERTER_JSON__; var CLIENT_IP = __PANEL_CLIENT_IP_JSON__; var HAS_AUTH = true;${apiAdapter}`
 );
 
 dashboard = dashboard.replace(
@@ -248,7 +519,7 @@ dashboard = dashboard.replace(
 );
 
 dashboard = dashboard
-  .replaceAll("fetch('?flag=stats')", "apiFetch('/stats')")
+  .replaceAll("const res = await fetch('?flag=stats');", "const cfPayload = getActiveCfStatsPayload();\n                const res = await apiFetch('/stats', cfPayload ? { method:'POST', body: JSON.stringify(cfPayload) } : {});")
   .replaceAll("fetch('?flag=get_logs')", "apiFetch('/logs')")
   .replaceAll("fetch('?flag=get_whitelist')", "apiFetch('/whitelist')")
   .replaceAll("fetch('?flag=add_whitelist', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ip}) })", "apiFetch('/whitelist', { method:'POST', body:JSON.stringify({ip}) })")
@@ -259,15 +530,62 @@ dashboard = dashboard
   .replaceAll("const endpoint = type === 'tg' ? 'validate_tg' : 'validate_cf';", "const endpoint = type === 'tg' ? 'validate/tg' : 'validate/cf';")
   .replaceAll("fetch('?flag=' + endpoint, { method:'POST', body:JSON.stringify(payload) })", "apiFetch('/' + endpoint, { method:'POST', body:JSON.stringify(payload) })");
 
+const proxyIpPersistence = `
+        function loadSavedProxyIp() {
+            const el = document.getElementById('pIp');
+            if (!el) return;
+            const saved = localStorage.getItem('grainPanelProxyIp');
+            if (saved) { el.value = saved; updateLink(); }
+            el.addEventListener('input', function() { localStorage.setItem('grainPanelProxyIp', el.value.trim()); });
+        }
+`;
+
+dashboard = dashboard.replace(
+  `try{ if(localStorage.getItem('sbCollapsed')==='1') document.getElementById('sidebar')?.classList.add('collapsed'); }catch(e){}`,
+  `try{ if(localStorage.getItem('sbCollapsed')==='1') document.getElementById('sidebar')?.classList.add('collapsed'); }catch(e){}\n                loadSavedProxyIp();`
+);
+
+dashboard = dashboard.replace(
+  'function updateLink() {',
+  proxyIpPersistence + '\n        function updateLink() {'
+);
+
+
+
+const localPanelConfigPersistence = `
+        function readLocalPanelConfig() {
+            try { return JSON.parse(localStorage.getItem('grainPanelLocalConfig') || '{}') || {}; }
+            catch (e) { return {}; }
+        }
+        function writeLocalPanelConfig(data) {
+            const allowed = new Set(['ADD','ADDAPI','ADDCSV','DLS','PROXYIP','SUB_DOMAIN','SUBAPI','PS','LOGIN_PAGE_TITLE','DASHBOARD_TITLE','TG_GROUP_URL','SITE_URL','GITHUB_URL','PROXY_CHECK_URL','CLASH_CONFIG','SINGBOX_CONFIG_V11','SINGBOX_CONFIG_V12','WL_IP','ECH_ENABLED','ECH_SNI','ECH_DNS','BG_LOGIN','BG_DASH','GLASS_A','SCRIM_A','CF_CONFIGS']);
+            ['CF_ID','CF_TOKEN','CF_EMAIL','CF_KEY'].forEach(function(key) { allowed.add(key); });
+            const current = readLocalPanelConfig();
+            Object.entries(data || {}).forEach(function(entry) {
+                const key = entry[0];
+                if (!allowed.has(key)) return;
+                current[key] = String(entry[1] ?? '');
+            });
+            localStorage.setItem('grainPanelLocalConfig', JSON.stringify(current));
+        }
+`;
+
+dashboard = dashboard.replace(
+  /async function saveConfig\(data, modalId\) \{\s*try \{/,
+  localPanelConfigPersistence + `async function saveConfig(data, modalId) {
+            writeLocalPanelConfig(data);
+            try {`
+);
+
 dashboard = dashboard.replace(
   `        function logout() {
             document.cookie = "auth=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
-            sessionStorage.removeItem("is_active");
+            localStorage.removeItem("grainPanelSessionUntil");
             location.reload();
         }`,
   `        function logout() {
             apiFetch('/logout', { method:'POST' }).catch(() => {}).finally(() => {
-                sessionStorage.removeItem("is_active");
+                localStorage.removeItem("grainPanelSessionUntil");
                 location.reload();
             });
         }`
@@ -303,6 +621,45 @@ function scriptLiteral(text) {
   return JSON.stringify(text).replace(/<\/script/gi, '<\\/script');
 }
 
+function htmlValue(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function jsValue(value) {
+  return JSON.stringify(String(value ?? '')).replace(/<\/script/gi, '<\\/script');
+}
+
+function jsBoolean(value) {
+  return value ? 'true' : 'false';
+}
+
+function cfConfigsValue(value) {
+  const text = String(value || '[]');
+  try {
+    const parsed = JSON.parse(text);
+    return scriptLiteral(JSON.stringify(Array.isArray(parsed) ? parsed : []));
+  } catch (e) {
+    return scriptLiteral('[]');
+  }
+}
+
+function cssUrlValue(value) {
+  const slash = String.fromCharCode(92);
+  const quote = String.fromCharCode(34);
+  return String(value ?? '')
+    .split(slash).join(slash + slash)
+    .split(quote).join(slash + quote)
+    .split(String.fromCharCode(13)).join(' ')
+    .split(String.fromCharCode(10)).join(' ')
+    .split(String.fromCharCode(12)).join(' ')
+    .split('<').join(slash + '3C ')
+    .split('>').join(slash + '3E ');
+}
+
 const dashboardLiteral = scriptLiteral(dashboard);
 const fallbackLinks = {
   site: constants.SITE_URL,
@@ -319,6 +676,9 @@ const loginScript = `<script>
         const FIRST_RUN_PASSWORD = ${JSON.stringify(constants.WEB_PASSWORD)};
         let panelLinks = Object.assign({}, FALLBACK_LINKS);
         let loginBusy = false;
+        let dashboardLoaded = false;
+        let dashboardLoading = false;
+        window.__grainPanelDashboardLoaded = false;
 
         function setLoginLoading(loading) {
             loginBusy = !!loading;
@@ -453,7 +813,7 @@ const loginScript = `<script>
             try {
                 const next = await checkBackendAddress(input?.value);
                 saveBackend(next);
-                sessionStorage.removeItem('is_active');
+                localStorage.removeItem('grainPanelSessionUntil');
                 alert('后端地址已保存，请使用后端 WEB_PASSWORD 登录。');
                 location.reload();
             } catch (e) {
@@ -476,7 +836,7 @@ const loginScript = `<script>
             const scrim = Math.min(95, Math.max(0, parseInt(scrimA || 55, 10) || 55));
             let css = ':root{--glass-a:' + (glass / 100) + ';--scrim-a:' + (scrim / 100) + '}';
             if (bgUrl) {
-                css += 'body{background:#0a0d12 url("' + String(bgUrl).replace(/"/g, '\\\\"') + '") center/cover fixed!important}';
+                css += 'body{background:#0a0d12 url("' + cssUrlValue(bgUrl) + '") center/cover fixed!important}';
                 css += 'body::before{content:"";position:fixed;inset:0;background:rgba(8,10,15,var(--scrim-a));z-index:0;pointer-events:none}';
                 if (mode === 'dash') css += 'body.light::before{background:rgba(255,255,255,var(--scrim-a))}.container{position:relative;z-index:2}';
                 else css += '.glass-box{position:relative;z-index:10}';
@@ -507,7 +867,12 @@ const loginScript = `<script>
                     document.querySelector('.login-logo')?.setAttribute('src', logo);
                 }
                 const bg = theme.background || {};
-                applyLoginBackground(bg.login || DEFAULT_LOGIN_BG, bg.glassA, bg.scrimA);
+                const localCfg = readLocalPanelConfig();
+                applyLoginBackground(
+                    localPanelValue(localCfg, 'BG_LOGIN', bg.login || DEFAULT_LOGIN_BG),
+                    localPanelValue(localCfg, 'GLASS_A', bg.glassA),
+                    localPanelValue(localCfg, 'SCRIM_A', bg.scrimA)
+                );
             } catch (e) {}
         }
 
@@ -529,22 +894,72 @@ const loginScript = `<script>
             window.open(panelLinks.github || FALLBACK_LINKS.github, '_blank');
         }
 
+        function readLocalPanelConfig() {
+            try { return JSON.parse(localStorage.getItem('grainPanelLocalConfig') || '{}') || {}; }
+            catch (e) { return {}; }
+        }
+
+        function localPanelValue(cfg, key, fallback) {
+            return Object.prototype.hasOwnProperty.call(cfg, key) ? cfg[key] : fallback;
+        }
+
+        function htmlValue(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        function jsValue(value) {
+            return JSON.stringify(String(value ?? '')).replace(/<\\/script/gi, '<\\\\/script');
+        }
+
+        function jsBoolean(value) {
+            return value ? 'true' : 'false';
+        }
+
+        function cfConfigsValue(value) {
+            const text = String(value || '[]');
+            try {
+                const parsed = JSON.parse(text);
+                return jsValue(JSON.stringify(Array.isArray(parsed) ? parsed : []));
+            } catch (e) {
+                return jsValue('[]');
+            }
+        }
+
+        function cssUrlValue(value) {
+            const slash = String.fromCharCode(92);
+            const quote = String.fromCharCode(34);
+            return String(value ?? '')
+                .split(slash).join(slash + slash)
+                .split(quote).join(slash + quote)
+                .split(String.fromCharCode(13)).join(' ')
+                .split(String.fromCharCode(10)).join(' ')
+                .split(String.fromCharCode(12)).join(' ')
+                .split('<').join(slash + '3C ')
+                .split('>').join(slash + '3E ');
+        }
+
         function fillDashboardTemplate(data, backend) {
-            const cfg = data.config || {};
+            const cfg = Object.assign({}, data.config || {}, readLocalPanelConfig());
             const secrets = data.secrets || {};
+            ['CF_ID','CF_TOKEN','CF_EMAIL','CF_KEY'].forEach(function(key) { if (cfg[key]) secrets[key] = cfg[key]; });
             const status = data.status || {};
             const identity = data.identity || {};
             const echOn = String(cfg.ECH_ENABLED || '') === 'true';
             const host = identity.host || new URL(backend).hostname;
             const replacements = {
-                '__PANEL_BACKEND__': backend,
+                '__PANEL_BACKEND_JSON__': jsValue(backend),
                 '__PANEL_HOST__': host,
+                '__PANEL_UUID_JSON__': jsValue(data.uuid || ''),
                 '__PANEL_UUID__': data.uuid || '',
                 '__PANEL_PROXYIP__': cfg.PROXYIP || '',
                 '__PANEL_SUBPASS__': data.subPassword || '',
                 '__PANEL_SUBDOMAIN__': cfg.SUB_DOMAIN || host,
-                '__PANEL_CONVERTER__': cfg.SUBAPI || '',
-                '__PANEL_CLIENT_IP__': identity.ip || '',
+                '__PANEL_CONVERTER_JSON__': jsValue(cfg.SUBAPI || ''),
+                '__PANEL_CLIENT_IP_JSON__': jsValue(identity.ip || ''),
                 '__PANEL_ADD__': cfg.ADD || '',
                 '__PANEL_ADDAPI__': cfg.ADDAPI || '',
                 '__PANEL_ADDCSV__': cfg.ADDCSV || '',
@@ -554,10 +969,13 @@ const loginScript = `<script>
                 '__PANEL_CF_TOKEN__': secrets.CF_TOKEN || '',
                 '__PANEL_CF_MAIL__': secrets.CF_EMAIL || '',
                 '__PANEL_CF_KEY__': secrets.CF_KEY || '',
+                '__PANEL_CF_CONFIGS_JSON__': cfConfigsValue(cfg.CF_CONFIGS),
                 '__PANEL_DASH_TITLE__': cfg.DASHBOARD_TITLE || 'CFW 控制台',
-                '__PANEL_PROXY_CHECK_URL__': cfg.PROXY_CHECK_URL || '',
+                '__PANEL_PROXY_CHECK_URL_JSON__': jsValue(cfg.PROXY_CHECK_URL || ''),
                 '__PANEL_DLS__': cfg.DLS || '',
                 '__PANEL_BG_LOGIN__': cfg.BG_LOGIN || '',
+                '__PANEL_ECH_SNI_JSON__': jsValue(cfg.ECH_SNI || ''),
+                '__PANEL_ECH_DNS_JSON__': jsValue(cfg.ECH_DNS || ''),
                 '__PANEL_ECH_SNI__': cfg.ECH_SNI || '',
                 '__PANEL_ECH_DNS__': cfg.ECH_DNS || '',
                 '__PANEL_TG_STATE__': status.telegram ? 'on' : 'off',
@@ -565,27 +983,39 @@ const loginScript = `<script>
                 '__PANEL_ECH_CHECKED__': echOn ? 'checked' : '',
                 '__PANEL_ECH_LABEL__': echOn ? '已启用' : '已关闭',
                 '__PANEL_ECH_DETAIL_STYLE__': echOn ? '' : 'display:none',
-                '__PANEL_ECH_ON__': echOn ? 'true' : 'false',
+                '__PANEL_ECH_ON_JSON__': jsBoolean(echOn),
                 '__PANEL_FP_DISPLAY__': echOn ? 'firefox' : 'randomized'
             };
             let html = DASHBOARD_TEMPLATE;
             for (const [key, value] of Object.entries(replacements)) {
-                html = html.split(key).join(String(value ?? '').replace(/<\\/script/gi, '<\\\\/script'));
+                const replacement = key.endsWith('_JSON__') ? String(value ?? '""') : htmlValue(value);
+                html = html.split(key).join(replacement);
             }
             html = html.replace('</head>', buildBgStyle(cfg.BG_DASH || '', cfg.GLASS_A, cfg.SCRIM_A, 'dash') + '</head>');
             return html;
         }
 
         async function loadDashboard() {
+            if (dashboardLoaded || dashboardLoading || window.__grainPanelDashboardLoaded) return;
+            dashboardLoading = true;
+            try {
             const base = await requireBackend();
-            if (!base) return;
+            if (!base) { dashboardLoading = false; return; }
             const res = await apiFetch('/bootstrap', {}, base);
             if (!res.ok) throw new Error(res.status === 401 ? '登录已过期，请重新登录' : '后端返回错误：' + res.status);
             const data = await res.json();
+            if (dashboardLoaded || window.__grainPanelDashboardLoaded) return;
             const html = fillDashboardTemplate(data, base);
+            dashboardLoaded = true;
+            window.__grainPanelDashboardLoaded = true;
+            window.onload = null;
             document.open();
             document.write(html);
             document.close();
+            } catch (e) {
+                dashboardLoading = false;
+                throw e;
+            }
         }
 
         async function verify() {
@@ -606,7 +1036,7 @@ const loginScript = `<script>
             try {
                 const res = await apiFetch('/login', { method: 'POST', body: JSON.stringify({ password: p }) }, base);
                 if (!res.ok) throw new Error('密码错误或 CORS 未放行');
-                sessionStorage.setItem("is_active", "1");
+                localStorage.setItem("grainPanelSessionUntil", String(Date.now() + 7200 * 1000));
                 await loadDashboard();
                 loadedDashboard = true;
             } catch (e) {
@@ -622,7 +1052,9 @@ const loginScript = `<script>
         }
 
         async function checkSession() {
-            if (!sessionStorage.getItem("is_active")) return;
+            if (dashboardLoaded || dashboardLoading || window.__grainPanelDashboardLoaded) return;
+            const sessionUntil = Number(localStorage.getItem('grainPanelSessionUntil') || 0);
+            if (!sessionUntil || sessionUntil <= Date.now()) { localStorage.removeItem('grainPanelSessionUntil'); return; }
             const base = getBackend();
             if (!base) return;
             try {
@@ -633,6 +1065,7 @@ const loginScript = `<script>
         }
 
         window.onload = function() {
+            if (dashboardLoaded || dashboardLoading || window.__grainPanelDashboardLoaded) return;
             generateStars();
             applyLoginBackground(DEFAULT_LOGIN_BG);
             loadTheme();

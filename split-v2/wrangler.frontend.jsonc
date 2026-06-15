@@ -1,0 +1,27 @@
+﻿{
+  "$schema": "https://json.schemastore.org/wrangler",
+  "name": "graintcp-subscriber",
+  "main": "frontend-worker-subscriber.js",
+  "compatibility_date": "2026-06-14",
+  "workers_dev": true,
+  
+  "vars": {
+    "WEB_PASSWORD": "admin123",
+    "FRONTEND_TITLE": "GrainTCP 订阅器"
+  },
+  
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "graintcp-subscriber-db",
+      "database_id": "请填写你的D1数据库ID"
+    }
+  ],
+  
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true
+    }
+  }
+}
