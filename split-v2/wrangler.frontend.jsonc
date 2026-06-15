@@ -6,15 +6,15 @@
   "workers_dev": true,
   
   "vars": {
-    "WEB_PASSWORD": "admin123",
+    "WEB_PASSWORD": "tyr",
     "FRONTEND_TITLE": "GrainTCP 订阅器"
   },
   
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "graintcp-subscriber-db",
-      "database_id": "请填写你的D1数据库ID"
+      "database_name": "proxypannel",
+      "database_id": "6a06a0c7-50d9-486e-a695-da0d86b0dcc8"
     }
   ],
   
