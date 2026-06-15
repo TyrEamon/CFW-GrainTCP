@@ -482,7 +482,12 @@ async function handleApiRequest(request, env, path, method, ctx) {
     return response;
   }
 
-  if (path === "session" && method === "GET") return json({ ok: true, authenticated: await isAuthenticated(request, env) }, 200, request);
+  if (path === "session" && method === "GET") {
+    const authenticated = await isAuthenticated(request, env);
+    const response = json({ ok: true, authenticated, ttl: SESSION_TTL_SECONDS }, 200, request);
+    if (authenticated) response.headers.append("Set-Cookie", createSessionCookie(request, await getConfig(env, "WEB_PASSWORD", DEFAULT_WEB_PASSWORD)));
+    return response;
+  }
 
   if (!await isAuthenticated(request, env)) return json({ ok: false, msg: "Unauthorized" }, 401, request);
 

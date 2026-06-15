@@ -1054,15 +1054,23 @@ const loginScript = `<script>
 
         async function checkSession() {
             if (dashboardLoaded || dashboardLoading || window.__grainPanelDashboardLoaded) return;
-            const sessionUntil = Number(localStorage.getItem('grainPanelSessionUntil') || 0);
-            if (!sessionUntil || sessionUntil <= Date.now()) { localStorage.removeItem('grainPanelSessionUntil'); return; }
             const base = getBackend();
             if (!base) return;
             try {
-                const res = await apiFetch('/session', {}, base);
+                const res = await apiFetch('/session', { timeoutMs: 8000 }, base);
                 const data = await res.json().catch(() => ({}));
-                if (res.ok && data.authenticated) await loadDashboard();
-            } catch (e) {}
+                if (res.ok && data.authenticated) {
+                    const ttl = Math.max(60, Number(data.ttl || 7200) || 7200);
+                    localStorage.setItem('grainPanelSessionUntil', String(Date.now() + ttl * 1000));
+                    await loadDashboard();
+                    return;
+                }
+                localStorage.removeItem('grainPanelSessionUntil');
+                try { sessionStorage.removeItem('is_active'); } catch (e) {}
+            } catch (e) {
+                const sessionUntil = Number(localStorage.getItem('grainPanelSessionUntil') || 0);
+                if (!sessionUntil || sessionUntil <= Date.now()) localStorage.removeItem('grainPanelSessionUntil');
+            }
         }
 
         window.onload = function() {
