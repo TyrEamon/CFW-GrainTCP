@@ -669,6 +669,30 @@ dashboard = dashboard.replace(
         }`
 );
 
+// ===== split 修复：会话保持(2h) + 快速订阅区「保存当前订阅配置」按钮 =====
+// 1) 快速订阅区新增「保存当前订阅配置」按钮：写 UUID/SUB_DOMAIN/HOST_DOMAIN/PROXYIP/ECH 到 D1（config 表 key-value，无需改表）
+dashboard = dashboard.replace(
+  `                    <div class="btn-group">
+                        <button class="btn btn-success" onclick="copyId('finalLink')">复制链接</button>
+                        <button class="btn btn-primary" onclick="testSub()">测试访问</button>
+                    </div>`,
+  `                    <div class="btn-group">
+                        <button class="btn btn-success" onclick="copyId('finalLink')">复制链接</button>
+                        <button class="btn btn-primary" onclick="testSub()">测试访问</button>
+                        <button class="btn btn-primary" onclick="saveCurrentSubscriptionConfig()"><svg viewBox="0 0 24 24"><use href="#i-save"/></svg> 保存当前订阅配置</button>
+                    </div>`
+);
+// 2) 禁用 is_active 客户端重载门：会话改由服务端 2h cookie + /api/session 滑动续期管理
+dashboard = dashboard.replace(
+  'if (HAS_AUTH && !sessionStorage.getItem("is_active")) {',
+  'if (false) { /* split: 会话由服务端 cookie(2h) 管理，禁用客户端 is_active 重载门 */'
+);
+// 3) 保存配置后不再整页重载（这是"改配置就掉登录"的根因；配置已写入 D1 与本地缓存）
+dashboard = dashboard.replaceAll(
+  'setTimeout(() => location.reload(), 500);',
+  '/* split: 保存后不整页重载，避免误判掉登录 */'
+);
+
 let login = context.loginPage(
   constants.TG_GROUP_URL,
   constants.SITE_URL,
