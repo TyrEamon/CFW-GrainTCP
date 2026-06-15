@@ -716,30 +716,23 @@ const loginScript = `<script>
             return s.replace(/\\/+$/, '');
         }
 
+        function clearLegacyPanelApiBackends() {
+            ['grainBackendBase', 'backendBase'].forEach(function(key) {
+                try { localStorage.removeItem(key); } catch (e) {}
+            });
+        }
+
         function getBackend() {
-            const fromQuery = normalizeBackend(new URLSearchParams(location.search).get('backend'));
-            if (fromQuery) return saveBackend(fromQuery);
-            const configured = normalizeBackend(DEFAULT_BACKEND);
-            if (configured) return configured;
-            const keys = ['grainPanelBackend', 'grainBackendBase', 'backendBase'];
-            for (const key of keys) {
-                const saved = normalizeBackend(localStorage.getItem(key));
-                if (saved) return saved;
-            }
-            return '';
+            clearLegacyPanelApiBackends();
+            return normalizeBackend(location.origin);
         }
 
         function saveBackend(base) {
-            const normalized = normalizeBackend(base);
-            if (!normalized) return '';
-            localStorage.setItem('grainPanelBackend', normalized);
-            return normalized;
+            return normalizeBackend(base);
         }
 
         function resetBackend() {
-            localStorage.removeItem('grainPanelBackend');
-            localStorage.removeItem('grainBackendBase');
-            localStorage.removeItem('backendBase');
+            clearLegacyPanelApiBackends();
         }
 
         async function apiFetch(path, options, explicitBase) {
@@ -1023,28 +1016,15 @@ const loginScript = `<script>
             const p = document.getElementById("pwd").value;
             if(!p) return;
             const base = getBackend();
-            if (!base) {
-                if (p === FIRST_RUN_PASSWORD) {
-                    showFirstRunSetup();
-                    return;
-                }
-                alert('首次初始化密码错误。没有后端地址时，只能用模板密码进入后端地址初始化。');
-                return;
-            }
             let loadedDashboard = false;
             setLoginLoading(true);
             try {
                 const res = await apiFetch('/login', { method: 'POST', body: JSON.stringify({ password: p }) }, base);
-                if (!res.ok) throw new Error('密码错误或 CORS 未放行');
+                if (!res.ok) throw new Error('Login failed: password is wrong or /api/login is unavailable');
                 localStorage.setItem("grainPanelSessionUntil", String(Date.now() + 7200 * 1000));
                 await loadDashboard();
                 loadedDashboard = true;
             } catch (e) {
-                if (p === FIRST_RUN_PASSWORD) {
-                    resetBackend();
-                    showFirstRunSetup();
-                    return;
-                }
                 alert(e.message || e);
             } finally {
                 if (!loadedDashboard) setLoginLoading(false);
@@ -1092,7 +1072,7 @@ export default {
     if (url.pathname !== '/' && url.pathname !== '/index.html') {
       return new Response('Not Found', { status: 404 });
     }
-    const backend = env.PANEL_BACKEND || env.BACKEND_URL || env.DEFAULT_BACKEND || '';
+    const backend = url.origin;
     const loginBg = env.PANEL_LOGIN_BG || env.PANEL_BG_LOGIN || env.BG_LOGIN || '';
     return new Response(injectPanelRuntime(PANEL_HTML, backend, loginBg), {
       headers: {
