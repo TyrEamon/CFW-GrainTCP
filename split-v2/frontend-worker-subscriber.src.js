@@ -3,6 +3,9 @@ import originalPanelWorker from "../split/frontend-worker.js";
 const DEFAULT_WEB_PASSWORD = "abc";
 const SESSION_COOKIE_NAME = "auth";
 const SESSION_TTL_SECONDS = 7200;
+// 订阅源(SUB订阅器)域名：留空 = 用前端 D1 的 ADD/ADDAPI/ADDCSV 等配置本地出节点；
+// 填外部域名 = 维持原代理/委托行为。可被 D1/env 的 SUB_DOMAIN 覆盖。
+const DEFAULT_SUB_DOMAIN = "";
 
 function corsHeaders(origin) {
   return {
@@ -279,6 +282,146 @@ async function getBackendStats(backend, range = "24h") {
   }
 }
 
+
+// ===== 本地出节点：用前端 D1 的优选IP配置生成订阅（移植自 backend-worker-lite）=====
+const P_V = "vl" + "ess";
+const stripIPv6Brackets = (h) => (h.startsWith("[") && h.endsWith("]") ? h.slice(1, -1) : h);
+const isIPv6Host = (h) => stripIPv6Brackets(h).includes(":");
+const formatHostForUrl = (h) => (isIPv6Host(h) ? `[${stripIPv6Brackets(h)}]` : stripIPv6Brackets(h));
+
+function parseAddressPort(seg) {
+  const raw = (seg || "").trim();
+  if (!raw) return ["", 443];
+  if (raw.startsWith("[")) {
+    const m = raw.match(/^\[([^\]]+)\](?::(\d+))?$/);
+    if (m) return [m[1], Number(m[2] || 443)];
+    return [stripIPv6Brackets(raw), 443];
+  }
+  const colonCount = (raw.match(/:/g) || []).length;
+  if (colonCount > 1) return [raw, 443];
+  const idx = raw.lastIndexOf(":");
+  if (idx > -1) {
+    const addr = raw.slice(0, idx);
+    const portText = raw.slice(idx + 1);
+    if (/^\d+$/.test(portText)) return [addr, Number(portText)];
+  }
+  return [raw, 443];
+}
+
+async function getCustomIPs(env, dlsThreshold) {
+  const allIPs = [];
+  const threshold = Number(dlsThreshold) || 7;
+  const addText = await getConfig(env, "ADD", "");
+  if (addText) addText.split("\n").forEach((line) => { const t = line.trim(); if (t && !t.startsWith("#")) allIPs.push(t); });
+  const addApi = await getConfig(env, "ADDAPI", "");
+  if (addApi) {
+    for (const u of addApi.split("\n").filter((x) => x.trim().startsWith("http"))) {
+      try {
+        const res = await fetch(u.trim(), { headers: { "User-Agent": "Mozilla/5.0" } });
+        if (res.ok) (await res.text()).split("\n").forEach((line) => { const t = line.trim(); if (t && !t.startsWith("#")) allIPs.push(t); });
+      } catch (_) {}
+    }
+  }
+  const addCsv = await getConfig(env, "ADDCSV", "");
+  if (addCsv) {
+    for (const u of addCsv.split("\n").filter((x) => x.trim().startsWith("http"))) {
+      try {
+        const res = await fetch(u.trim(), { headers: { "User-Agent": "Mozilla/5.0" } });
+        if (!res.ok) continue;
+        (await res.text()).split("\n").forEach((line) => {
+          const t = line.trim();
+          if (!t || t.startsWith("#") || t.startsWith("IP") || t.includes("端口") || t.includes("速度")) return;
+          const cols = t.split(",");
+          const c1 = cols.length >= 2 ? cols[1].trim() : "";
+          const isNewFmt = c1 && (c1.includes(":") || c1.includes(".") || !/^[0-9]+$/.test(c1));
+          const csvIp = cols[0].trim();
+          const csvPort = isNewFmt ? (cols.length >= 3 ? cols[2].trim() : "") : c1;
+          const lastCol = cols[cols.length - 1].trim().toLowerCase();
+          const speedRaw = parseFloat(lastCol);
+          if (!isNaN(speedRaw)) { const speedMB = lastCol.includes("kb") ? speedRaw / 1024 : speedRaw; if (speedMB < threshold) return; }
+          if (csvIp) allIPs.push(csvPort && csvPort !== "443" ? csvIp + ":" + csvPort : csvIp);
+        });
+      } catch (_) {}
+    }
+  }
+  return allIPs;
+}
+
+function buildNodeLinks(host, uuid, proxyIP, customIPs, psName, ech) {
+  const echParam = ech && ech.enabled ? `&ech=${encodeURIComponent((ech.sni ? ech.sni + "+" : "") + ech.dns)}` : "";
+  const fp = ech && ech.enabled ? "firefox" : "randomized";
+  const commonUrlPart = `?enc` + `ryption=none&secu` + `rity=tls&sni=${host}&fp=${fp}&alpn=h3&type=ws&host=${host}` + echParam;
+  const separator = psName ? ` ${psName}` : "";
+  if (!customIPs || customIPs.length === 0) {
+    const path = proxyIP ? `/proxyip=${proxyIP}` : "/";
+    const nodeName = `${psName || "Worker"} - Default`;
+    const defaultHost = formatHostForUrl(proxyIP || host);
+    return `${P_V}://${uuid}@${defaultHost}:443${commonUrlPart}&path=${encodeURIComponent(path)}#${encodeURIComponent(nodeName)}`;
+  }
+  const result = [];
+  for (const ipInfo of customIPs) {
+    let [addressPart, ...nameParts] = ipInfo.split("#");
+    const uniqueName = nameParts.join("#").trim();
+    addressPart = addressPart.trim();
+    const [ip, port] = parseAddressPort(addressPart);
+    const path = proxyIP ? `/proxyip=${proxyIP}` : "/";
+    let nodeName = uniqueName || ip;
+    if (psName) nodeName = `${nodeName}${separator}`;
+    result.push(`${P_V}://${uuid}@${formatHostForUrl(ip)}:${port}${commonUrlPart}&path=${encodeURIComponent(path)}#${encodeURIComponent(nodeName)}`);
+  }
+  return result.join("\n");
+}
+
+// SUB_DOMAIN 清洗：去协议头/路径，只留主机名（空则返回空字符串）
+async function effectiveSubDomain(env) {
+  let s = String(await getConfig(env, "SUB_DOMAIN", DEFAULT_SUB_DOMAIN) || "").trim();
+  if (!s) return "";
+  if (s.includes("://")) s = s.split("://")[1];
+  if (s.includes("/")) s = s.split("/")[0];
+  return s.trim();
+}
+
+// 用前端 D1 的优选IP/UUID/PROXYIP/ECH 本地生成订阅（不代理后端 /sub）
+async function localSubscription(request, env) {
+  const url = new URL(request.url);
+
+  // 选定后端（用于推导 Host/SNI 与 UUID）：?backend=<id> 优先，否则默认后端
+  let backend = null;
+  const backendParam = url.searchParams.get("backend");
+  if (backendParam && backendParam !== "custom") backend = await getBackend(env, parseInt(backendParam, 10));
+  if (!backend) backend = await getDefaultBackend(env);
+  let backendHost = "";
+  if (backend?.domain) { try { backendHost = new URL(normalizeUrl(backend.domain)).host; } catch (_) { backendHost = ""; } }
+
+  // Host/SNI：query host/sni > D1 HOST_DOMAIN > 后端域名
+  const host = String(url.searchParams.get("host") || url.searchParams.get("sni") || await getConfig(env, "HOST_DOMAIN", "") || backendHost || "").trim();
+  if (!host) return new Response("缺少 Worker 域名 (HOST_DOMAIN)，无法生成订阅", { status: 400 });
+
+  // UUID：D1 UUID > 后端 uuid > query uuid
+  const uuid = String(await getConfig(env, "UUID", "") || backend?.uuid || url.searchParams.get("uuid") || "").trim();
+  if (!uuid) return new Response("缺少 UUID，无法生成订阅", { status: 400 });
+
+  // proxyip：path 里的 /proxyip= > ?proxyip= > D1 PROXYIP
+  let proxyIp = url.searchParams.get("proxyip") || await getConfig(env, "PROXYIP", "");
+  const pathParam = url.searchParams.get("path");
+  if (pathParam && pathParam.includes("/proxyip=")) proxyIp = pathParam.split("/proxyip=")[1];
+
+  const ech = {
+    enabled: (await getConfig(env, "ECH_ENABLED", "true")) === "true",
+    sni: await getConfig(env, "ECH_SNI", "cloudflare-ech.com"),
+    dns: await getConfig(env, "ECH_DNS", "https://odvr.nic.cz/doh")
+  };
+
+  const ps = await getConfig(env, "PS", "");
+  const dls = await getConfig(env, "DLS", "7");
+  const allIPs = await getCustomIPs(env, dls);
+  const listText = buildNodeLinks(host, uuid, proxyIp, allIPs, ps, ech);
+  const body = btoa(unescape(encodeURIComponent(listText)));
+  return new Response(body, {
+    status: 200,
+    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...corsHeaders(request.headers.get("Origin")) }
+  });
+}
 
 async function proxySubscription(request, env, forcedPassword = "") {
   const url = new URL(request.url);
@@ -661,12 +804,21 @@ export default {
     const legacyFlagResponse = await handleLegacyFlagRequest(request, env, ctx);
     if (legacyFlagResponse) return legacyFlagResponse;
 
-    if (path === "sub") return proxySubscription(request, env);
+    if (path === "sub") {
+      const subDom = await effectiveSubDomain(env);
+      // SUB_DOMAIN 留空（或指向前端自身）→ 用前端 D1 配置本地出节点；否则维持原代理/委托行为
+      if (!subDom || subDom.toLowerCase() === url.host.toLowerCase()) return localSubscription(request, env);
+      return proxySubscription(request, env);
+    }
     if (path.startsWith("api/")) return handleApiRequest(request, env, path.slice(4).replace(/\/+$/, "") || "session", method, ctx);
     if (path === "" || path === "index.html") return serveOriginalPanel(request, env);
 
     const defaultBackend = await getDefaultBackend(env).catch(() => null);
-    if (defaultBackend && decodeURIComponent(path) === defaultBackend.sub_password) return proxySubscription(request, env, defaultBackend.sub_password);
+    if (defaultBackend && decodeURIComponent(path) === defaultBackend.sub_password) {
+      const subDom = await effectiveSubDomain(env);
+      if (!subDom || subDom.toLowerCase() === url.host.toLowerCase()) return localSubscription(request, env);
+      return proxySubscription(request, env, defaultBackend.sub_password);
+    }
 
     return new Response("Not Found", { status: 404 });
   }

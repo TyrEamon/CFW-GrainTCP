@@ -380,10 +380,9 @@ const apiAdapter = `
             const value = String(host || '').trim();
             if (!value) return;
             const hostInput = document.getElementById('hostDom');
-            const subInput = document.getElementById('subDom');
             const uuidInput = document.getElementById('uuidInput');
             if (hostInput) hostInput.value = value;
-            if (subInput) subInput.value = value;
+            // 订阅源地址 (subDom) 不再随 Worker 域名联动——订阅源应保持前端订阅器自身域名
             const match = getPanelBackendProfiles().find(item => backendHostFromUrl(item.url) === value);
             if (uuidInput && match && match.uuid) uuidInput.value = match.uuid;
             updateLink();
