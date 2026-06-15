@@ -104,6 +104,15 @@ let dashboard = context.dashPage(
 dashboard = addMobileWebAppMeta(dashboard);
 dashboard = dashboard.replace('window.open("__PANEL_PROXY_CHECK_URL_JSON__", "_blank")', 'window.open(__PANEL_PROXY_CHECK_URL_JSON__, "_blank")');
 
+dashboard = dashboard
+  .replace(/(<div class="input-block">\s*<label>[^<]*Worker[^<]*\(SNI\/Host\)[^<]*<\/label>\s*)<input type="text" id="hostDom" value="([^"]*)" oninput="updateLink\(\)">/,
+    '$1<select id="hostBackendSelect" onchange="applyHostBackendSelection(this.value)" style="margin-bottom:8px"></select>\n                        <input type="text" id="hostDom" value="$2" oninput="renderHostBackendSelect();updateLink()">\n                    </div>\n                    <div class="input-block">\n                        <label>节点 UUID</label>\n                        <input type="text" id="uuidInput" value="__PANEL_UUID__" oninput="updateLink()" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">')
+  .replace(/id="bgDash" value="[^"]*"/, 'id="bgDash" value="__PANEL_BG_DASH__"')
+  .replace(/id="glassSld"([^>]*?)value="[^"]*"/, 'id="glassSld"$1value="__PANEL_GLASS_A__"')
+  .replace(/id="glassNum"([^>]*?)value="[^"]*"/, 'id="glassNum"$1value="__PANEL_GLASS_A__"')
+  .replace(/id="scrimSld"([^>]*?)value="[^"]*"/, 'id="scrimSld"$1value="__PANEL_SCRIM_A__"')
+  .replace(/id="scrimNum"([^>]*?)value="[^"]*"/, 'id="scrimNum"$1value="__PANEL_SCRIM_A__"');
+
 dashboard = dashboard.replace(
   `                    <div class="input-block">
                         <label>Worker 域名 (SNI/Host)</label>
@@ -277,7 +286,7 @@ const apiAdapter = `
                 setPanelBackendProfiles(list);
             }
             return list
-                .map(item => ({ name: String(item.name || '').trim(), url: panelNormalizeBackend(item.url || item.domain || '') }))
+                .map(item => ({ name: String(item.name || '').trim(), url: panelNormalizeBackend(item.url || item.domain || ''), uuid: String(item.uuid || item.UUID || '').trim() }))
                 .filter(item => item.url);
         }
         function setPanelBackendProfiles(list) {
@@ -288,7 +297,7 @@ const apiAdapter = `
                 const id = backendProfileId(url);
                 if (!id || seen.has(id)) return;
                 seen.add(id);
-                clean.push({ name: String(item.name || backendHostFromUrl(url) || '后端地址').trim(), url });
+                clean.push({ name: String(item.name || backendHostFromUrl(url) || '后端地址').trim(), url, uuid: String(item.uuid || item.UUID || '').trim() });
             });
             localStorage.setItem('grainPanelSubBackends', JSON.stringify(clean));
             return clean;
@@ -311,13 +320,16 @@ const apiAdapter = `
             const urlInput = document.getElementById('panelBackendUrl');
             if (nameInput) nameInput.value = item ? item.name : '';
             if (urlInput) urlInput.value = item ? item.url : '';
+            const uuidInput = document.getElementById('uuidInput');
+            if (uuidInput && item && item.uuid) uuidInput.value = item.uuid;
         }
         function saveBackendAddress() {
             const next = panelNormalizeBackend(document.getElementById('panelBackendUrl')?.value);
             if (!next) { alert('请填写后端 Worker 地址'); return; }
             const name = String(document.getElementById('panelBackendName')?.value || backendHostFromUrl(next) || '后端地址').trim();
+            const uuid = String(document.getElementById('uuidInput')?.value || '').trim();
             const list = getPanelBackendProfiles().filter(item => backendProfileId(item.url) !== backendProfileId(next));
-            list.unshift({ name, url: next });
+            list.unshift({ name, url: next, uuid });
             setPanelBackendProfiles(list);
             renderPanelBackendControls();
             const select = document.getElementById('panelBackendSelect');
@@ -369,8 +381,11 @@ const apiAdapter = `
             if (!value) return;
             const hostInput = document.getElementById('hostDom');
             const subInput = document.getElementById('subDom');
+            const uuidInput = document.getElementById('uuidInput');
             if (hostInput) hostInput.value = value;
             if (subInput) subInput.value = value;
+            const match = getPanelBackendProfiles().find(item => backendHostFromUrl(item.url) === value);
+            if (uuidInput && match && match.uuid) uuidInput.value = match.uuid;
             updateLink();
         }
         function safeParseCfProfiles(raw) {
@@ -438,10 +453,15 @@ const apiAdapter = `
             const cfMail = val('cfMail');
             const cfKey = val('cfKey');
             if ([cfId, cfToken, cfMail, cfKey].some(v => v && v.startsWith('****'))) {
-                alert('请先填写 CF 凭证');
+                alert('当前 CF 凭证是 **** 掩码，无法新建配置档。请重新输入完整 Account ID + API Token，或 Email + Global API Key。');
                 return null;
             }
-            if (!cfId && !cfToken && !cfMail && !cfKey) { alert('默认 CF 配置'); return null; }
+            const hasTokenAuth = !!(cfId && cfToken);
+            const hasGlobalKeyAuth = !!(cfMail && cfKey);
+            if (!hasTokenAuth && !hasGlobalKeyAuth) {
+                alert('不能只填写配置名。请填写 CF 凭证：方案1 填 Account ID + API Token；方案2 填 Email + Global API Key。');
+                return null;
+            }
             return normalizeCfProfile({ name: name || cfId || cfMail || 'CF 配置', CF_ID: cfId, CF_TOKEN: cfToken, CF_EMAIL: cfMail, CF_KEY: cfKey });
         }
         function loadCfProfile(id) {
@@ -475,8 +495,8 @@ const apiAdapter = `
         }
         function deleteCfProfile() {
             const id = String(document.getElementById('cfProfileSelect')?.value || localStorage.getItem('grainPanelActiveCfProfile') || '').trim().toLowerCase();
-            if (!id) { alert('新建 CF 配置'); return; }
-            if (!confirm('请先填写 CF 凭证')) return;
+            if (!id) { alert('请先选择要删除的 CF 配置档'); return; }
+            if (!confirm('确定删除这个 CF 配置档？')) return;
             writeCfProfiles(readCfProfiles().filter(item => cfProfileId(item) !== id));
             if (localStorage.getItem('grainPanelActiveCfProfile') === id) localStorage.removeItem('grainPanelActiveCfProfile');
             ['cfProfileName','cfAcc','cfTok','cfMail','cfKey'].forEach(function(inputId) { const el = document.getElementById(inputId); if (el) el.value = ''; });
@@ -535,8 +555,53 @@ const proxyIpPersistence = `
             const el = document.getElementById('pIp');
             if (!el) return;
             const saved = localStorage.getItem('grainPanelProxyIp');
-            if (saved) { el.value = saved; updateLink(); }
-            el.addEventListener('input', function() { localStorage.setItem('grainPanelProxyIp', el.value.trim()); });
+            if (!el.value && saved) { el.value = saved; updateLink(); }
+            function persistProxyIp() {
+                const value = el.value.trim();
+                localStorage.setItem('grainPanelProxyIp', value);
+                try { writeLocalPanelConfig({ PROXYIP: value }); } catch (e) {}
+                apiFetch('/config', { method:'POST', body: JSON.stringify({ PROXYIP: value }) }).catch(() => {});
+            }
+            el.addEventListener('input', function() {
+                const value = el.value.trim();
+                localStorage.setItem('grainPanelProxyIp', value);
+                try { writeLocalPanelConfig({ PROXYIP: value }); } catch (e) {}
+            });
+            el.addEventListener('change', persistProxyIp);
+            el.addEventListener('blur', persistProxyIp);
+        }
+`; 
+
+
+const currentSubscriptionConfigPersistence = `
+        async function saveCurrentSubscriptionConfig() {
+            const data = {
+                UUID: val('uuidInput'),
+                HOST_DOMAIN: val('hostDom'),
+                SUB_DOMAIN: val('subDom'),
+                PROXYIP: val('pIp'),
+                ECH_ENABLED: document.getElementById('echSwitch')?.checked ? 'true' : 'false',
+                ECH_SNI: val('echSni'),
+                ECH_DNS: val('echDns')
+            };
+            if (!data.UUID) { alert('请先填写节点 UUID'); return; }
+            if (!data.HOST_DOMAIN) { alert('请先填写 Worker 域名 (SNI/Host)'); return; }
+            const backendUrl = panelNormalizeBackend(data.HOST_DOMAIN);
+            const list = getPanelBackendProfiles().filter(item => backendHostFromUrl(item.url) !== data.HOST_DOMAIN);
+            if (backendUrl) list.unshift({ name: data.HOST_DOMAIN, url: backendUrl, uuid: data.UUID });
+            setPanelBackendProfiles(list);
+            localStorage.setItem('grainPanelProxyIp', data.PROXYIP);
+            writeLocalPanelConfig(data);
+            try {
+                const res = await apiFetch('/config', { method:'POST', body: JSON.stringify(data) });
+                const result = await res.json().catch(() => ({}));
+                if (!res.ok || result.ok === false || result.status === 'error') throw new Error(result.msg || result.message || ('保存失败：' + res.status));
+                renderPanelBackendControls();
+                updateLink();
+                alert('当前订阅配置已保存到 D1。');
+            } catch (e) {
+                alert(e.message || e);
+            }
         }
 `;
 
@@ -545,9 +610,23 @@ dashboard = dashboard.replace(
   `try{ if(localStorage.getItem('sbCollapsed')==='1') document.getElementById('sidebar')?.classList.add('collapsed'); }catch(e){}\n                loadSavedProxyIp();`
 );
 
+
+dashboard = dashboard.replace(
+  /<button class="btn btn-success" style="width:100%" onclick="saveNodeConfig\(\)">([\s\S]*?)<\/button>/,
+  '<button class="btn btn-success" style="width:100%" onclick="saveNodeConfig()">$1</button>\n                    <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="saveCurrentSubscriptionConfig()"><svg viewBox="0 0 24 24"><use href="#i-save"/></svg> 保存当前订阅配置</button>'
+);
+
 dashboard = dashboard.replace(
   'function updateLink() {',
-  proxyIpPersistence + '\n        function updateLink() {'
+  proxyIpPersistence + currentSubscriptionConfigPersistence + '\n        function updateLink() {'
+);
+
+dashboard = dashboard.replace(
+  "const data = { ADD: val('inpAdd'), ADDAPI: val('inpAddApi'), ADDCSV: val('inpAddCsv'), DLS: val('inpDls') };\n            saveConfig(data, null);","const data = { ADD: val('inpAdd'), ADDAPI: val('inpAddApi'), ADDCSV: val('inpAddCsv'), DLS: val('inpDls'), UUID: val('uuidInput'), HOST_DOMAIN: val('hostDom'), PROXYIP: val('pIp'), SUB_DOMAIN: val('subDom') };\n            localStorage.setItem('grainPanelProxyIp', val('pIp'));\n            saveConfig(data, null);"
+);
+
+dashboard = dashboard.replace(
+  "search.set('uuid', UUID);","search.set('uuid', (document.getElementById('uuidInput')?.value || UUID).trim());"
 );
 
 
@@ -558,7 +637,7 @@ const localPanelConfigPersistence = `
             catch (e) { return {}; }
         }
         function writeLocalPanelConfig(data) {
-            const allowed = new Set(['ADD','ADDAPI','ADDCSV','DLS','PROXYIP','SUB_DOMAIN','SUBAPI','PS','LOGIN_PAGE_TITLE','DASHBOARD_TITLE','TG_GROUP_URL','SITE_URL','GITHUB_URL','PROXY_CHECK_URL','CLASH_CONFIG','SINGBOX_CONFIG_V11','SINGBOX_CONFIG_V12','WL_IP','ECH_ENABLED','ECH_SNI','ECH_DNS','BG_LOGIN','BG_DASH','GLASS_A','SCRIM_A','CF_CONFIGS']);
+            const allowed = new Set(['ADD','ADDAPI','ADDCSV','DLS','UUID','HOST_DOMAIN','PROXYIP','SUB_DOMAIN','SUBAPI','PS','LOGIN_PAGE_TITLE','DASHBOARD_TITLE','TG_GROUP_URL','SITE_URL','GITHUB_URL','PROXY_CHECK_URL','CLASH_CONFIG','SINGBOX_CONFIG_V11','SINGBOX_CONFIG_V12','WL_IP','ECH_ENABLED','ECH_SNI','ECH_DNS','BG_LOGIN','BG_DASH','GLASS_A','SCRIM_A','CF_CONFIGS']);
             ['CF_ID','CF_TOKEN','CF_EMAIL','CF_KEY'].forEach(function(key) { allowed.add(key); });
             const current = readLocalPanelConfig();
             Object.entries(data || {}).forEach(function(entry) {
@@ -867,11 +946,10 @@ const loginScript = `<script>
                     document.querySelector('.login-logo')?.setAttribute('src', logo);
                 }
                 const bg = theme.background || {};
-                const localCfg = readLocalPanelConfig();
                 applyLoginBackground(
-                    localPanelValue(localCfg, 'BG_LOGIN', bg.login || DEFAULT_LOGIN_BG),
-                    localPanelValue(localCfg, 'GLASS_A', bg.glassA),
-                    localPanelValue(localCfg, 'SCRIM_A', bg.scrimA)
+                    bg.login || DEFAULT_LOGIN_BG,
+                    bg.glassA,
+                    bg.scrimA
                 );
             } catch (e) {}
         }
@@ -897,6 +975,14 @@ const loginScript = `<script>
         function readLocalPanelConfig() {
             try { return JSON.parse(localStorage.getItem('grainPanelLocalConfig') || '{}') || {}; }
             catch (e) { return {}; }
+        }
+
+        function writeLocalPanelConfig(data) {
+            const current = readLocalPanelConfig();
+            Object.entries(data || {}).forEach(function(entry) {
+                current[entry[0]] = String(entry[1] ?? '');
+            });
+            localStorage.setItem('grainPanelLocalConfig', JSON.stringify(current));
         }
 
         function localPanelValue(cfg, key, fallback) {
@@ -943,13 +1029,15 @@ const loginScript = `<script>
         }
 
         function fillDashboardTemplate(data, backend) {
-            const cfg = Object.assign({}, data.config || {}, readLocalPanelConfig());
+            const serverCfg = data.config || {};
+            if (Object.keys(serverCfg).length) writeLocalPanelConfig(serverCfg);
+            const cfg = Object.assign({}, readLocalPanelConfig(), serverCfg);
             const secrets = data.secrets || {};
             ['CF_ID','CF_TOKEN','CF_EMAIL','CF_KEY'].forEach(function(key) { if (cfg[key]) secrets[key] = cfg[key]; });
             const status = data.status || {};
             const identity = data.identity || {};
             const echOn = String(cfg.ECH_ENABLED || '') === 'true';
-            const host = identity.host || new URL(backend).hostname;
+            const host = cfg.HOST_DOMAIN || identity.host || new URL(backend).hostname;
             const replacements = {
                 '__PANEL_BACKEND_JSON__': jsValue(backend),
                 '__PANEL_HOST__': host,
@@ -974,6 +1062,9 @@ const loginScript = `<script>
                 '__PANEL_PROXY_CHECK_URL_JSON__': jsValue(cfg.PROXY_CHECK_URL || ''),
                 '__PANEL_DLS__': cfg.DLS || '',
                 '__PANEL_BG_LOGIN__': cfg.BG_LOGIN || '',
+                '__PANEL_BG_DASH__': cfg.BG_DASH || '',
+                '__PANEL_GLASS_A__': cfg.GLASS_A || '72',
+                '__PANEL_SCRIM_A__': cfg.SCRIM_A || '55',
                 '__PANEL_ECH_SNI_JSON__': jsValue(cfg.ECH_SNI || ''),
                 '__PANEL_ECH_DNS_JSON__': jsValue(cfg.ECH_DNS || ''),
                 '__PANEL_ECH_SNI__': cfg.ECH_SNI || '',

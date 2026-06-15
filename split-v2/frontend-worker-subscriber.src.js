@@ -366,11 +366,12 @@ async function panelBootstrap(request, env) {
   const url = new URL(request.url);
   const host = url.host;
   const backend = await getDefaultBackend(env);
-  const uuid = backend?.uuid || await getConfig(env, "UUID", "");
+  const uuid = await getConfig(env, "UUID", backend?.uuid || "");
   const subPassword = backend?.sub_password || await getConfig(env, "SUB_PASSWORD", "");
   const proxyIp = await getConfig(env, "PROXYIP", await getConfig(env, "PROXY_IP", ""));
   const converter = await getConfig(env, "SUBAPI", await getConfig(env, "CONVERTER", "https://subapi.cmliussss.net"));
   const subDomain = await getConfig(env, "SUB_DOMAIN", host);
+  const hostDomain = await getConfig(env, "HOST_DOMAIN", "");
   const tgToken = await getConfig(env, "TG_BOT_TOKEN", "");
   const tgId = await getConfig(env, "TG_CHAT_ID", "");
   const cfId = backend?.cf_account_id || await getConfig(env, "CF_ID", "");
@@ -408,8 +409,10 @@ async function panelBootstrap(request, env) {
       ADDAPI: await getConfig(env, "ADDAPI", ""),
       ADDCSV: await getConfig(env, "ADDCSV", ""),
       DLS: await getConfig(env, "DLS", "7"),
+      UUID: uuid,
       PROXYIP: proxyIp,
       SUB_DOMAIN: subDomain,
+      HOST_DOMAIN: hostDomain,
       SUBAPI: converter,
       PS: await getConfig(env, "PS", ""),
       LOGIN_PAGE_TITLE: await getConfig(env, "LOGIN_PAGE_TITLE", "Worker Login"),
@@ -442,7 +445,7 @@ async function panelBootstrap(request, env) {
   }, 200, request);
 }
 
-const CONFIG_KEYS = new Set(["ADD", "ADDAPI", "ADDCSV", "DLS", "TG_BOT_TOKEN", "TG_CHAT_ID", "CF_ID", "CF_TOKEN", "CF_EMAIL", "CF_KEY", "CF_CONFIGS", "PROXYIP", "SUB_DOMAIN", "SUBAPI", "PS", "LOGIN_PAGE_TITLE", "DASHBOARD_TITLE", "TG_GROUP_URL", "SITE_URL", "GITHUB_URL", "PROXY_CHECK_URL", "CLASH_CONFIG", "SINGBOX_CONFIG_V11", "SINGBOX_CONFIG_V12", "WL_IP", "ECH_ENABLED", "ECH_SNI", "ECH_DNS", "BG_LOGIN", "BG_DASH", "GLASS_A", "SCRIM_A"]);
+const CONFIG_KEYS = new Set(["ADD", "ADDAPI", "ADDCSV", "DLS", "UUID", "HOST_DOMAIN", "TG_BOT_TOKEN", "TG_CHAT_ID", "CF_ID", "CF_TOKEN", "CF_EMAIL", "CF_KEY", "CF_CONFIGS", "PROXYIP", "SUB_DOMAIN", "SUBAPI", "PS", "LOGIN_PAGE_TITLE", "DASHBOARD_TITLE", "TG_GROUP_URL", "SITE_URL", "GITHUB_URL", "PROXY_CHECK_URL", "CLASH_CONFIG", "SINGBOX_CONFIG_V11", "SINGBOX_CONFIG_V12", "WL_IP", "ECH_ENABLED", "ECH_SNI", "ECH_DNS", "BG_LOGIN", "BG_DASH", "GLASS_A", "SCRIM_A"]);
 
 async function handleApiRequest(request, env, path, method, ctx) {
   if (method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request.headers.get("Origin")) });
