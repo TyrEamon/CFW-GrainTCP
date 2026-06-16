@@ -492,6 +492,44 @@ async function deleteWhitelist(env, ip) {
   return { ok: true };
 }
 
+async function tgNotify(env, text) {
+  const token = await getConfig(env, "TG_BOT_TOKEN", "");
+  const chatId = await getConfig(env, "TG_CHAT_ID", "");
+  if (!token || !chatId) return;
+  try {
+    await fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: "HTML", disable_web_page_preview: true })
+    });
+  } catch (_) {}
+}
+
+async function isWhitelistedIP(env, ip) {
+  if (!ip || ip === "Unknown") return false;
+  if (!env.DB) return false;
+  try {
+    if (!await ensureWhitelistTable(env)) return false;
+    const row = await env.DB.prepare("SELECT ip FROM whitelist WHERE ip = ?").bind(ip).first();
+    return !!row;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function maybeTgNotify(env, request, action) {
+  try {
+    const ip = request.headers.get("CF-Connecting-IP") || "Unknown";
+    if (await isWhitelistedIP(env, ip)) return;
+    const cf = request.cf || {};
+    const region = [cf.city, cf.country].filter(Boolean).join(", ") || "Unknown";
+    const ua = request.headers.get("User-Agent") || "Unknown";
+    const time = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
+    const text = "\u{1F514} <b>" + action + "</b>\n\u{1F310} IP: <code>" + ip + "</code>\n\u{1F4CD} \u5730\u533A: " + region + "\n\u{1F551} \u65F6\u95F4: " + time + "\n\u{1F5A5} UA: " + ua;
+    await tgNotify(env, text);
+  } catch (_) {}
+}
+
 async function addLog(env, request, action) {
   if (!env.DB) return;
   try {
@@ -617,6 +655,7 @@ async function handleApiRequest(request, env, path, method, ctx) {
     const correctPassword = await getConfig(env, "WEB_PASSWORD", DEFAULT_WEB_PASSWORD);
     if (String(body.password || "") !== correctPassword) return json({ ok: false, success: false, msg: "密码错误" }, 401, request);
     ctx?.waitUntil?.(addLog(env, request, "登录后台"));
+    ctx?.waitUntil?.(maybeTgNotify(env, request, "登录后台"));
     const response = json({ ok: true, success: true }, 200, request);
     response.headers.append("Set-Cookie", createSessionCookie(request, correctPassword));
     return response;
@@ -805,6 +844,7 @@ export default {
     if (legacyFlagResponse) return legacyFlagResponse;
 
     if (path === "sub") {
+      ctx?.waitUntil?.(maybeTgNotify(env, request, "订阅拉取"));
       const subDom = await effectiveSubDomain(env);
       // SUB_DOMAIN 留空（或指向前端自身）→ 用前端 D1 配置本地出节点；否则维持原代理/委托行为
       if (!subDom || subDom.toLowerCase() === url.host.toLowerCase()) return localSubscription(request, env);
@@ -815,6 +855,7 @@ export default {
 
     const defaultBackend = await getDefaultBackend(env).catch(() => null);
     if (defaultBackend && decodeURIComponent(path) === defaultBackend.sub_password) {
+      ctx?.waitUntil?.(maybeTgNotify(env, request, "订阅拉取"));
       const subDom = await effectiveSubDomain(env);
       if (!subDom || subDom.toLowerCase() === url.host.toLowerCase()) return localSubscription(request, env);
       return proxySubscription(request, env, defaultBackend.sub_password);
