@@ -339,6 +339,96 @@ function parseAddressPort(seg) {
   return [raw, 443];
 }
 
+const RGN_SENT = String.fromCharCode(1) + "RGN:";
+const CC_TO_PROXYIP = {
+  HK: "ProxyIP.HK.CMLiussss.net", SG: "ProxyIP.SG.CMLiussss.net", JP: "ProxyIP.JP.CMLiussss.net",
+  KR: "ProxyIP.KR.CMLiussss.net", IN: "ProxyIP.IN.CMLiussss.net", GB: "ProxyIP.GB.CMLiussss.net",
+  FR: "ProxyIP.FR.CMLiussss.net", DE: "ProxyIP.DE.CMLiussss.net", NL: "ProxyIP.NL.CMLiussss.net",
+  SE: "ProxyIP.SE.CMLiussss.net", FI: "ProxyIP.FI.CMLiussss.net", PL: "ProxyIP.PL.CMLiussss.net",
+  RU: "ProxyIP.RU.CMLiussss.net", CH: "ProxyIP.CH.CMLiussss.net", LV: "ProxyIP.LV.CMLiussss.net",
+  US: "ProxyIP.US.CMLiussss.net", CA: "ProxyIP.CA.CMLiussss.net"
+};
+const DC_TO_CC = {
+  NRT:"JP", KIX:"JP", HND:"JP", HKG:"HK", ICN:"KR", SIN:"SG", BOM:"IN", MAA:"IN", DEL:"IN", HYD:"IN",
+  LHR:"GB", MAN:"GB", CDG:"FR", MRS:"FR", FRA:"DE", DUS:"DE", MUC:"DE", TXL:"DE", STR:"DE", HAM:"DE",
+  AMS:"NL", ARN:"SE", GOT:"SE", HEL:"FI", WAW:"PL", DME:"RU", SVO:"RU", LED:"RU", ZRH:"CH", GVA:"CH",
+  RIX:"LV", LAX:"US", SJC:"US", SFO:"US", SEA:"US", IAD:"US", ORD:"US", DFW:"US", MIA:"US", EWR:"US",
+  ATL:"US", DEN:"US", PHX:"US", BOS:"US", YYZ:"CA", YUL:"CA", YVR:"CA"
+};
+const CC_NAME_HINTS = {
+  HK:["香港","HONGKONG","HONG KONG"], SG:["新加坡","狮城","SINGAPORE"], JP:["日本","东京","東京","大阪","JAPAN","TOKYO","OSAKA"],
+  KR:["韩国","韓國","首尔","首爾","KOREA","SEOUL"], IN:["印度","INDIA","MUMBAI"], GB:["英国","英國","伦敦","倫敦","UNITED KINGDOM","LONDON","BRITAIN"],
+  FR:["法国","法國","巴黎","FRANCE","PARIS"], DE:["德国","德國","法兰克福","法蘭克福","GERMANY","FRANKFURT"], NL:["荷兰","荷蘭","阿姆斯特丹","NETHERLANDS","AMSTERDAM"],
+  SE:["瑞典","SWEDEN","STOCKHOLM"], FI:["芬兰","芬蘭","FINLAND","HELSINKI"], PL:["波兰","波蘭","POLAND","WARSAW"],
+  RU:["俄罗斯","俄羅斯","莫斯科","RUSSIA","MOSCOW"], CH:["瑞士","SWITZERLAND","ZURICH"], LV:["拉脱维亚","拉脫維亞","LATVIA","RIGA"],
+  US:["美国","美國","UNITED STATES","LOS ANGELES","SAN JOSE","ASHBURN","CHICAGO","SEATTLE","AMERICA","USA"], CA:["加拿大","CANADA","TORONTO","MONTREAL","VANCOUVER"]
+};
+
+function ccToFlag(cc) {
+  const c = String(cc || "").toUpperCase();
+  if (!/^[A-Z]{2}$/.test(c)) return "";
+  return String.fromCodePoint(c.charCodeAt(0) - 65 + 0x1F1E6) + String.fromCodePoint(c.charCodeAt(1) - 65 + 0x1F1E6);
+}
+
+function flagToCC(s) {
+  const arr = Array.from(String(s || ""));
+  const letters = [];
+  for (const ch of arr) {
+    const cp = ch.codePointAt(0);
+    if (cp >= 0x1F1E6 && cp <= 0x1F1FF) letters.push(String.fromCharCode(cp - 0x1F1E6 + 65));
+  }
+  if (letters.length >= 2) return letters[0] + letters[1];
+  return "";
+}
+
+function regionFromName(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+  const flag = flagToCC(raw);
+  if (flag && CC_TO_PROXYIP[flag]) return flag;
+  const up = raw.toUpperCase();
+  const dc = up.match(/\b([A-Z]{3})\b/g);
+  if (dc) { for (const d of dc) { if (DC_TO_CC[d]) return DC_TO_CC[d]; } }
+  for (const cc in CC_NAME_HINTS) {
+    for (const kw of CC_NAME_HINTS[cc]) { if (up.indexOf(kw.toUpperCase()) !== -1) return cc; }
+  }
+  const m = up.match(/\b([A-Z]{2})\b/);
+  if (m && CC_TO_PROXYIP[m[1]]) return m[1];
+  return "";
+}
+
+async function geoLookupCC(env, ip, memo) {
+  if (!ip) return "";
+  if (memo && memo.has(ip)) return memo.get(ip);
+  const cacheKey = "ipgeo:" + ip;
+  let cc = "";
+  try { const cached = await getConfig(env, cacheKey, ""); if (cached) cc = cached; } catch (_) {}
+  if (!cc) {
+    try {
+      const res = await fetch("https://ipwho.is/" + encodeURIComponent(ip) + "?fields=success,country_code", { headers: { "User-Agent": "Mozilla/5.0" } });
+      if (res.ok) {
+        const j = await res.json();
+        if (j && j.success && j.country_code) {
+          cc = String(j.country_code).toUpperCase();
+          try { await setConfig(env, cacheKey, cc); } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+  if (memo) memo.set(ip, cc);
+  return cc;
+}
+
+async function resolveNodeRegion(env, regionTag, name, ip, memo) {
+  let cc = "";
+  if (regionTag) cc = DC_TO_CC[String(regionTag).toUpperCase()] || "";
+  if (!cc) cc = regionFromName(name);
+  if (!cc) cc = await geoLookupCC(env, ip, memo);
+  if (cc && CC_TO_PROXYIP[cc]) return { proxyip: CC_TO_PROXYIP[cc], flag: ccToFlag(cc) };
+  return { proxyip: "", flag: "" };
+}
+
+
 async function getCustomIPs(env, dlsThreshold) {
   const allIPs = [];
   const threshold = Number(dlsThreshold) || 7;
@@ -370,7 +460,11 @@ async function getCustomIPs(env, dlsThreshold) {
           const lastCol = cols[cols.length - 1].trim().toLowerCase();
           const speedRaw = parseFloat(lastCol);
           if (!isNaN(speedRaw)) { const speedMB = lastCol.includes("kb") ? speedRaw / 1024 : speedRaw; if (speedMB < threshold) return; }
-          if (csvIp) allIPs.push(csvPort && csvPort !== "443" ? csvIp + ":" + csvPort : csvIp);
+          if (csvIp) {
+            const dc = cols.length >= 5 ? cols[4].trim() : "";
+            const base = csvPort && csvPort !== "443" ? csvIp + ":" + csvPort : csvIp;
+            allIPs.push(dc ? base + RGN_SENT + dc : base);
+          }
         });
       } catch (_) {}
     }
@@ -378,7 +472,7 @@ async function getCustomIPs(env, dlsThreshold) {
   return allIPs;
 }
 
-function buildNodeLinks(host, uuid, proxyIP, customIPs, psName, ech) {
+async function buildNodeLinks(host, uuid, proxyIP, customIPs, psName, ech, env) {
   const echParam = ech && ech.enabled ? `&ech=${encodeURIComponent((ech.sni ? ech.sni + "+" : "") + ech.dns)}` : "";
   const fp = ech && ech.enabled ? "firefox" : "randomized";
   const commonUrlPart = `?enc` + `ryption=none&secu` + `rity=tls&sni=${host}&fp=${fp}&alpn=h3&type=ws&host=${host}` + echParam;
@@ -390,14 +484,22 @@ function buildNodeLinks(host, uuid, proxyIP, customIPs, psName, ech) {
     return `${P_V}://${uuid}@${defaultHost}:443${commonUrlPart}&path=${encodeURIComponent(path)}#${encodeURIComponent(nodeName)}`;
   }
   const result = [];
-  for (const ipInfo of customIPs) {
-    let [addressPart, ...nameParts] = ipInfo.split("#");
+  const geoMemo = new Map();
+  for (const rawInfo of customIPs) {
+    let entry = rawInfo;
+    let regionTag = "";
+    const sIdx = entry.indexOf(RGN_SENT);
+    if (sIdx !== -1) { regionTag = entry.slice(sIdx + RGN_SENT.length).trim(); entry = entry.slice(0, sIdx); }
+    let [addressPart, ...nameParts] = entry.split("#");
     const uniqueName = nameParts.join("#").trim();
     addressPart = addressPart.trim();
     const [ip, port] = parseAddressPort(addressPart);
-    const path = proxyIP ? `/proxyip=${proxyIP}` : "/";
+    const region = await resolveNodeRegion(env, regionTag, uniqueName, ip, geoMemo);
+    const nodeProxyIP = region.proxyip || proxyIP;
+    const path = nodeProxyIP ? `/proxyip=${nodeProxyIP}` : "/";
     let nodeName = uniqueName || ip;
     if (psName) nodeName = `${nodeName}${separator}`;
+    if (region.flag) nodeName = `${nodeName} ${region.flag}`;
     result.push(`${P_V}://${uuid}@${formatHostForUrl(ip)}:${port}${commonUrlPart}&path=${encodeURIComponent(path)}#${encodeURIComponent(nodeName)}`);
   }
   return result.join("\n");
@@ -446,7 +548,7 @@ async function localSubscription(request, env) {
   const ps = await getConfig(env, "PS", "");
   const dls = await getConfig(env, "DLS", "7");
   const allIPs = await getCustomIPs(env, dls);
-  const listText = buildNodeLinks(host, uuid, proxyIp, allIPs, ps, ech);
+  const listText = await buildNodeLinks(host, uuid, proxyIp, allIPs, ps, ech, env);
   const body = btoa(unescape(encodeURIComponent(listText)));
   return new Response(body, {
     status: 200,
