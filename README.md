@@ -93,7 +93,7 @@ GrainTCPV1 是一个部署在 Cloudflare 上的代理节点管理系统，提供
 | 文件 | 大小 | 用途 |
 |------|------|------|
 | `worker.js` | ~247 KB | Workers/Pages 完整版（可读源码，支持环境变量 + D1） |
-| `snippets.js` | ~32 KB | Snippets 精简版（压缩代码，配置写在顶部） |
+| `snippets.js` | ~15 KB | Snippets 干净后端版（仅 WS 隧道 + ProxyIP + path 解析，无面板） |
 
 两份文件核心功能完全一致（TURN + SOCKS5 + HTTP + ProxyIP + ECH + 订阅 + 后台），仅部署方式和扩展功能不同。
 

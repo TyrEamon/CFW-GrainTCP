@@ -6,11 +6,10 @@
 split-v2/
 ├── schema.sql                          # D1 数据库表结构
 ├── backend-worker-lite.js              # 后端 Worker（Lite 版本）
-├── frontend-worker-subscriber.js       # 前端订阅器 Worker
+├── frontend-worker-subscriber.js       # 前端订阅器 Worker（唯一部署入口）
 ├── wrangler.backend.example.toml       # 后端配置示例
 ├── wrangler.frontend.jsonc             # 前端配置
 ├── DEPLOYMENT.md                       # 部署文档
-├── IMPLEMENTATION_PLAN.md              # 实施计划
 └── README.md                           # 本文件
 ```
 
@@ -36,7 +35,7 @@ split-v2/
 
 ### 1. 部署前端
 
-> **入口文件说明**：直接部署或复制到 Cloudflare Dashboard 时，请使用 `frontend-worker-subscriber.js`。`frontend-worker-subscriber.src.js` 是开发源码，包含 `import ../split/frontend-worker.js`，不能作为单文件直接复制部署。修改源码后运行 `node build-standalone.mjs` 重新生成可部署文件。
+> **入口文件说明**：直接部署或复制到 Cloudflare Dashboard 时，只使用 `frontend-worker-subscriber.js`。它现在是单文件真源；旧的 `frontend-worker-subscriber.src.js` 和 `build-standalone.mjs` 已删除，避免重建覆盖线上功能。
 
 ```bash
 # 创建 D1 数据库
